@@ -19,5 +19,11 @@ def parse_to_conllu(phrase: str) -> DataFrame:
     """
     doc: Doc = nlp(phrase)
     conll = doc._.conll_pd
+    # Index by column ID
+    conll = conll.set_index('ID')
+    # Decrement the ID by 1
+    conll.index = conll.index - 1
+    # Decrement the HEAD by 1
+    conll['HEAD'] = conll['HEAD'] - 1
     return conll
 # %%

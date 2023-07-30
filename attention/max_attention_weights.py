@@ -20,7 +20,7 @@ def max_attention_weights(attention_matrix):
     return max.indices
 # %%
 
-def heads_matching_relation(conll, indices_of_max_attention):
+def heads_matching_relation(conll, indices_of_max_attention, forward_relation=True):
     """
     Returns the heads matching relation between words in the phrase. There is a relation if conll row['HEAD'] == row['ID'].
 
@@ -35,13 +35,13 @@ def heads_matching_relation(conll, indices_of_max_attention):
     for i, row in conll.iterrows():
         # Go through all the words in the phrase to find the heads matching relation
         head = row['HEAD']
-        head_word = conll.iloc[head - 1]["FORM"]
+        if head == -1:
+            continue # Skip the root word
+        head_word = conll.loc[head]["FORM"]
         current_word = row["FORM"]
         #print(f'head: {head}, i: {i}, head_word: {head_word}, current_word: {current_word}')
-        if head == 0:
-            continue # Skip the root word
         # From the attention matrix, get all the elements where the last dimension in position i is equal to the head. Get their indices only
-        heads_matching_this_relation = torch.where(indices_of_max_attention[:, :, :, i] == (head - 1)) # -1 because the indices start at 0
+        heads_matching_this_relation = torch.where(indices_of_max_attention[:, :, :, i] == (head)) # -1 because the indices start at 0
         # Iterate over the indices of the heads matching this relation
         #print(f'Heads matching this relation: {heads_matching_this_relation}')
         for batch, layer, head in zip(*heads_matching_this_relation):
@@ -63,32 +63,34 @@ def join_subwords(attention_matrix: torch.Tensor, words_to_tokenized_words: list
     new_attention_matrix = attention_matrix.clone()
     # Sum the attention weights of the subwords on dimension -1 for the tokens that belong to the same word
     # The result is a tensor of shape [batch_size, num_heads, sequence_length, words]
-    for i, (word, tokenized_word) in enumerate(words_to_tokenized_words):
+    for i, (word, tokenized_words) in enumerate(words_to_tokenized_words):
         # If there is only one subword, there is no need to sum
-        if len(tokenized_word) == 1:
+        if len(tokenized_words) == 1:
+            i += 1
             continue
         # Sum the attention weights of the subwords on dimension -1 for the tokens that belong to the same word
-        print(f'old: {new_attention_matrix[0,0,0,:,:]}')
-        for j in range(len(tokenized_word)):
+        #print(f'old: {new_attention_matrix[0,0,0,:,:]}')
+        for j in range(len(tokenized_words)):
             if j == 0:
                 continue
-            new_attention_matrix[:, :, :, :, i] += attention_matrix[:, :, :, :, i + j]
+            new_attention_matrix[:, :, :, :, i] += new_attention_matrix[:, :, :, :, i + j]
             # Set the attention weights of the subwords to 0
             new_attention_matrix[:, :, :, :, i + j] = 0
         # Remove the positions from i + 1 to i + j
         new_attention_matrix = torch.cat([new_attention_matrix[:, :, :, :, :i + 1], new_attention_matrix[:, :, :, :, i + j + 1:]], dim=-1)
         # Now, for the dimension -2, we need to average the attention weights of the subwords
-        for j in range(len(tokenized_word)):
+        for j in range(len(tokenized_words)):
             if j == 0:
                 continue
             new_attention_matrix[:, :, :, i, :] += new_attention_matrix[:, :, :, i + j, :]
             # Set the attention weights of the subwords to 0
             new_attention_matrix[:, :, :, i + j, :] = 0
         # Average the attention weights of the subwords
-        new_attention_matrix[:, :, :, i, :] /= len(tokenized_word)
+        new_attention_matrix[:, :, :, i, :] /= len(tokenized_words)
         # Remove the positions from i + 1 to i + j
         new_attention_matrix = torch.cat([new_attention_matrix[:, :, :, :i + 1, :], new_attention_matrix[:, :, :, i + j + 1:, :]], dim=-2)
-        print(f'new: {new_attention_matrix[0,0,0,:,:]}')
+        #print(f'new: {new_attention_matrix[0,0,0,:,:]}')
+        i += len(tokenized_words)
     return new_attention_matrix
 
 # %%
