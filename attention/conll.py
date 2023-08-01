@@ -25,5 +25,19 @@ def parse_to_conllu(phrase: str) -> DataFrame:
     conll.index = conll.index - 1
     # Decrement the HEAD by 1
     conll['HEAD'] = conll['HEAD'] - 1
+    # Sometimes, there's two phrases in the same sentence, so the ID is not unique. In that case, we need to reset the index in the second phrase (i.e. continue the numbering)
+    # This happens if the last word of the dataframe does not have ID equal to the number of rows in the dataframe
+    if conll.iloc[-1].name != conll.shape[0] - 1:
+        # Now, for every row where the ID is not equal to the row position, we increment the HEAD by the difference
+        for i in range(conll.shape[0]):
+            # Skip the root word. The root word has HEAD = -1
+            if conll.iloc[i, conll.columns.get_loc('HEAD')] == -1:
+                continue
+            if conll.iloc[i].name != i:
+                difference = i - conll.iloc[i].name
+                conll.iloc[i, conll.columns.get_loc('HEAD')] += difference
+        # Reset the index so that the ID is unique and starts at 0
+        conll = conll.reset_index(drop=True)
+        # Call the index ID again
     return conll
 # %%

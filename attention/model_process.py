@@ -4,6 +4,7 @@ from transformers import AutoTokenizer, AutoModel
 import torch
 from attention.conll import parse_to_conllu
 
+MODEL = "t5-base"
 MODEL = "bigscience/bloom-560m"
 MODEL = "bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(MODEL)
@@ -40,7 +41,7 @@ def get_attention_matrix(conll_pd):
 # %%
 if __name__ == "__main__":
     pass
-    phrase = "The vaporizer like to eat fish"
+    phrase = "The kid likes to eat fish"
     conll_pd = parse_to_conllu(phrase)
     words = conll_pd['FORM'].tolist()
 
