@@ -1,1 +1,5 @@
-/abc.ipynb
+__pycache__
+.pytest_cache
+.vscode
+UD_*
+attention.egg-info

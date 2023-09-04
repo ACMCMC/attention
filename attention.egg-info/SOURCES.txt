@@ -1,4 +1,10 @@
 setup.py
+attention/__init__.py
+attention/conll.py
+attention/glue_eval.py
+attention/max_attention_weights.py
+attention/model_process.py
+attention/test_max_attention_weights.py
 attention.egg-info/PKG-INFO
 attention.egg-info/SOURCES.txt
 attention.egg-info/dependency_links.txt
