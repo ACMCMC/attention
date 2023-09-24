@@ -1,9 +1,10 @@
 # %%
 import torch
+from .max_attention_weights import max_attention_weights
 
-
-def get_relative_variability(attentions_matrix: torch.Tensor):
+def get_relative_variability_std_dev(attentions_matrix: torch.Tensor):
     """
+    [NOT USED]
     Returns a variability score based on whether the heads attend to a position X+n or not.
 
     Args:
@@ -35,3 +36,8 @@ def get_relative_variability(attentions_matrix: torch.Tensor):
     return std_dev
 
 # %%
+def get_relative_variability(attentions_matrix: torch.Tensor):
+    max_attentions = max_attention_weights(attentions_matrix)
+
+
+    return 0.0
