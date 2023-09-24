@@ -4,9 +4,9 @@ from transformers import AutoTokenizer, AutoModel
 import torch
 from attention.conll import parse_to_conllu
 
-MODEL = "bert-base-uncased"
 MODEL = "bigscience/bloom-560m"
 MODEL = "t5-base"
+MODEL = "bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(MODEL)
 model = AutoModel.from_pretrained(MODEL)
 

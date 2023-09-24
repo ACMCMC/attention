@@ -47,7 +47,6 @@ def test_batch():
 
     result = get_relative_variability(stacked_matrix)
 
-    print(result[0])
     assert torch.all(result[0] != 0)
     assert torch.all(result[1] == 0)
 # %%

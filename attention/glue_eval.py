@@ -8,6 +8,7 @@ from attention.max_attention_weights import (
     heads_matching_relation,
 )
 from attention.variability import get_relative_variability
+import torch
 
 glue_dataset = datasets.load_dataset("glue", "cola", split="test")
 
@@ -45,7 +46,7 @@ def get_matching_heads_sentence(example):
     ]
 
     # Get the variability of each head for each layer
-    variability = get_relative_variability(attentions_matrix=attention_matrix)
+    variability = get_relative_variability(attentions_matrix=attention_matrix[0])
     matching_heads_variability = [
         variability[layer, head]
         for (layer, head, _, _, dependency) in heads_matching_rel
@@ -85,7 +86,9 @@ num_layers = model.config.num_hidden_layers
 num_heads = model.config.num_attention_heads
 for relation in unique_relations:
     matrix = [[0 for _ in range(num_heads)] for _ in range(num_layers)]
-    opacity_matrix = [[0 for _ in range(num_heads)] for _ in range(num_layers)]
+    # opacity matrix is a tensor of size [num_layers, num_heads] with all zeros
+    opacity_matrix = torch.zeros((num_layers, num_heads))
+    total_words_matching_relation = 0
     total_words = 0
     for example in heads_matching_sentence:
         # Join matching_heads_layer_and_head and matching_heads_dependency to get the tuple
@@ -103,15 +106,19 @@ for relation in unique_relations:
                 if dependant < head:
                     continue
             if dependency == relation:
-                total_words += 1
+                total_words_matching_relation += 1
         for (layer, head), variability in zip(
             example["matching_heads_layer_and_head"],
             example["matching_heads_variability"],
         ):
             opacity_matrix[layer, head] += variability
-    if total_words < 25:
+        total_words += len(example["dependencies_reltype"])
+    if total_words_matching_relation < 25:
         continue
-    opacity_matrix /= total_words  # Get the average variability for each layer and head
+    # opacity_matrix /= total_words  # Get the average variability for each layer and head
+    # Divide the opacity matrix by the maximum value to normalize it
+    opacity_matrix /= opacity_matrix.max()
+
     # Plot the matrix. The upper limit of the colorbar is the number of words in the dataset
     # Title: relation
     # X axis: head
@@ -119,7 +126,26 @@ for relation in unique_relations:
     plt.title(f"Heads matching relation {relation}")
     plt.xlabel("Head")
     plt.ylabel("Layer")
-    sns.heatmap(matrix, cmap="YlGnBu", vmin=0, vmax=total_words, annot=True)
+    sns.heatmap(
+        matrix,
+        cmap="YlGnBu",
+        vmin=0,
+        vmax=total_words_matching_relation,
+        annot=True,
+        alpha=1.0 - opacity_matrix,
+    )
+
+    # Add the opacity matrix as a mask
+    #sns.heatmap(
+    #    opacity_matrix,
+    #    # Color map alpha is the opacity
+    #    cmap="Greys_r",
+    #    vmin=0,
+    #    vmax=1,
+    #    annot=False,
+    #    # mask=inverted_opacity_matrix < 0.5,
+    #    alpha=1.0 - opacity_matrix,
+    #)
     # Store it as a PDF
     plt.savefig(f"heads_matching_{relation}_{model.config.model_type}.pdf")
     plt.show()

@@ -1,6 +1,6 @@
 # %%
 import torch
-from .max_attention_weights import max_attention_weights
+from attention.max_attention_weights import max_attention_weights
 
 def get_relative_variability_std_dev(attentions_matrix: torch.Tensor):
     """
@@ -39,5 +39,21 @@ def get_relative_variability_std_dev(attentions_matrix: torch.Tensor):
 def get_relative_variability(attentions_matrix: torch.Tensor):
     max_attentions = max_attention_weights(attentions_matrix)
 
+    # subtract 0,1,2,3,4,... from each row
+    # First, generate a tensor of the same shape as the last dimension of the attention matrix
+    sequence_length = attentions_matrix.size()[-1]
+    positions_matrix = torch.tensor(
+        [i for i in range(sequence_length)]
+    ).type(torch.FloatTensor)
 
-    return 0.0
+    # Now, subtract the positions matrix from the max_attentions matrix
+    relative_positions = max_attentions - positions_matrix
+
+    # Now, get the standard deviation of the relative positions
+    std_dev = relative_positions.std(dim=-1)
+
+    # Normalize the standard deviation so that it is in the range [0,1]
+    std_dev = std_dev / std_dev.max()
+
+    return std_dev
+# %%

@@ -6,6 +6,7 @@ import spacy
 from spacy.tokens import Doc
 from pandas import DataFrame
 import pandas as pd
+from conllu import parse
 
 nlp = spacy.load("en_core_web_sm")
 nlp.add_pipe("conll_formatter", last=True)
@@ -47,4 +48,20 @@ def parse_to_conllu(phrase: str) -> DataFrame:
 # %%
 def load_conllu_file(filename):
     # Use the library to load the .conllu file into a Dataframe
-    pass
+    with open(filename, "r") as f:
+        data = f.read()
+    sentences = parse(data)
+
+    # The result is a list of sentences. Each sentence is a list of words. Each word is a dictionary with the keys FORM, HEAD, DEPREL, etc.
+    # We need to convert it to a dataframe
+    # First, get the list of words for each sentence
+    sentences_words = [[word for word in sentence] for sentence in sentences]
+    # Now, convert each word to a dictionary
+    sentences_dicts = [
+        {key: word[key] for key in word.keys()} for sentence in sentences_words for word in sentence
+    ]
+    # Now, convert the list of dictionaries to a dataframe
+    conll_pd = pd.DataFrame(sentences_dicts)
+    return conll_pd
+
+# %%
