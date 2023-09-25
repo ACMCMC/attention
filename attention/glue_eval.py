@@ -9,8 +9,12 @@ from attention.max_attention_weights import (
 )
 from attention.variability import get_relative_variability
 import torch
+from attention.conll import load_conllu_file
 
-glue_dataset = datasets.load_dataset("glue", "cola", split="test")
+conll_dataset = datasets.load_dataset("glue", "cola", split="test")
+conll_phrases = load_conllu_file("UD_English-GUM/en_gum-ud-train.conllu")
+# Separate the examples in the dataframe to generate a HF dataset
+
 
 
 # %%
@@ -61,7 +65,7 @@ def get_matching_heads_sentence(example):
     }
 
 
-heads_matching_sentence = glue_dataset.map(get_matching_heads_sentence, batched=False)
+heads_matching_sentence = conll_dataset.map(get_matching_heads_sentence, batched=False)
 # %%
 # Get all unique values for the relation
 # The relation is in the last position of the tuple 'dependencies'

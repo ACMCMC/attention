@@ -61,7 +61,6 @@ def load_conllu_file(filename):
         {key: word[key] for key in word.keys()} for sentence in sentences_words for word in sentence
     ]
     # Now, convert the list of dictionaries to a dataframe
-    conll_pd = pd.DataFrame(sentences_dicts)
-    return conll_pd
+    return sentences_dicts
 
 # %%
