@@ -57,3 +57,27 @@ def get_relative_variability(attentions_matrix: torch.Tensor):
 
     return std_dev
 # %%
+def get_absolute_variability(attentions_matrix: torch.Tensor):
+    max_attentions = max_attention_weights(attentions_matrix)
+
+    # subtract 0,1,2,3,4,... from each row
+    # First, generate a tensor of the same shape as the last dimension of the attention matrix
+    sequence_length = attentions_matrix.size()[-1]
+    positions_matrix = torch.tensor(
+        [i for i in range(sequence_length)]
+    ).type(torch.FloatTensor)
+
+    # Now, get the standard deviation of the relative positions
+    std_dev = positions_matrix.std(dim=-1)
+
+    # Normalize the standard deviation so that it is in the range [0,1]
+    std_dev = std_dev / std_dev.max()
+
+    return std_dev
+
+def get_combined_variability(attentions_matrix: torch.Tensor):
+    # Min of relative and absolute
+    relative = get_relative_variability(attentions_matrix)
+    absolute = get_absolute_variability(attentions_matrix)
+    combined = torch.min(relative, absolute)
+    return combined

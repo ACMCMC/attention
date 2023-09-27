@@ -12,15 +12,36 @@ import torch
 from attention.conll import load_conllu_file
 
 conll_dataset = datasets.load_dataset("glue", "cola", split="test")
-conll_phrases = load_conllu_file("UD_English-GUM/en_gum-ud-train.conllu")
+conll_phrases = load_conllu_file("/Users/aldan.creo/repos/attention/UD_Galician-CTG/gl_ctg-ud-dev.conllu")
+conll_dataset = datasets.Dataset.from_list(
+    conll_phrases,
+    features=datasets.Features(
+        {
+            'id': datasets.Value("int32"),
+            'form': datasets.Value("string"),
+            'lemma': datasets.Value("string"),
+            'upos': datasets.Value("string"),
+            'xpos': datasets.Value("string"),
+            'feats': datasets.Value("string"),
+            'head': datasets.Value("int32"),
+            'deprel': datasets.Value("string"),
+            'deps': datasets.Value("string"),
+            'misc': datasets.Value("string"),
+        }
+    ),
+    )
 # Separate the examples in the dataframe to generate a HF dataset
 
 
 
 # %%
 def get_matching_heads_sentence(example):
-    # print(f"Sentence: {example['sentence']}")
-    conll_pd = parse_to_conllu(example["sentence"])
+    # Does the example contain a sentence or a dataframe?
+    # If it is a sentence, parse it to a dataframe
+    if isinstance(example["sentence"], str):
+        conll_pd = parse_to_conllu(example["sentence"])
+    else:
+        conll_pd = example
     # Dependencies: a list of the form (dependent_word, head_word, relation)
     dependencies = [
         (row.name, conll_pd.loc[row["HEAD"]].name, row["DEPREL"])
