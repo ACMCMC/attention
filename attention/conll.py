@@ -1,12 +1,13 @@
+# %%
 """
 Parse a phrase into a CoNLL-U format.
 """
-# %%
 import spacy
 from spacy.tokens import Doc
 from pandas import DataFrame
 import pandas as pd
 from conllu import parse
+# %%
 
 nlp = spacy.load("en_core_web_sm")
 nlp.add_pipe("conll_formatter", last=True)
@@ -58,9 +59,26 @@ def load_conllu_file(filename):
     sentences_words = [[word for word in sentence] for sentence in sentences]
     # Now, convert each word to a dictionary
     sentences_dicts = [
-        {key: word[key] for key in word.keys()} for sentence in sentences_words for word in sentence
+        [{key: word[key] for key in word.keys()} for word in sentence]
+        for sentence in sentences_words
     ]
-    # Now, convert the list of dictionaries to a dataframe
+    sentences_dicts = [
+        [{k.upper(): v for k, v in e.items() if k not in ["misc"]} for e in p]
+        for p in sentences_dicts
+    ]
+    # Shift the indices by substracting 1 so that they are 0-indexed
+    print(type(sentences_dicts[0][0]['ID']))
+    sentences_dicts = [
+        [
+            {
+                **e,
+                "ID": e["ID"] - 1,
+            }
+            for e in p
+        ]
+        for p in sentences_dicts
+    ]
     return sentences_dicts
+
 
 # %%

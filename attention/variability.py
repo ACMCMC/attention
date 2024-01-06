@@ -54,6 +54,8 @@ def get_relative_variability(attentions_matrix: torch.Tensor):
 
     # Normalize the standard deviation so that it is in the range [0,1]
     std_dev = std_dev / std_dev.max()
+    # If the standard deviation is all 0, then we have a division by 0 (nan)
+    std_dev[torch.isnan(std_dev)] = 0
 
     return std_dev
 # %%

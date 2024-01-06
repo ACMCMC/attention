@@ -1,24 +1,22 @@
 # %%
 # Load model directly
-from transformers import AutoTokenizer, AutoModel
 import torch
-from attention.conll import parse_to_conllu
+import transformers
+from transformers import PreTrainedModel, AutoTokenizer
 
-MODEL = "t5-base"
-MODEL = "bert-base-uncased"
-MODEL = "bigscience/bloom-560m"
-tokenizer = AutoTokenizer.from_pretrained(MODEL)
-model = AutoModel.from_pretrained(MODEL)
+from attention.conll import parse_to_conllu
 
 # %%
 from attention.max_attention_weights import (
-    max_attention_weights,
     heads_matching_relation,
+    max_attention_weights,
 )
 
 
-def get_attention_matrix(conll_pd):
+def get_attention_matrix(conll_pd, model: PreTrainedModel):
     words = conll_pd["FORM"].tolist()
+    # Get the tokenizer from the model
+    tokenizer = AutoTokenizer.from_pretrained(model.name_or_path)
     tokenized_words = tokenizer(words)["input_ids"]
     words_to_tokenized_words = list(zip(words, tokenized_words))
     # Concatenate the list of lists into a single tensor
@@ -50,12 +48,18 @@ def get_attention_matrix(conll_pd):
 
 # %%
 if __name__ == "__main__":
-    pass
+    # This will only run if this file is called directly
+
     phrase = "The kid likes to eat fish"
     conll_pd = parse_to_conllu(phrase)
     words = conll_pd["FORM"].tolist()
 
-    original_words_stacked_attention_matrix = get_attention_matrix(conll_pd)
+    MODEL = "bert-base-uncased"
+    model = transformers.AutoModelForMaskedLM.from_pretrained(MODEL)
+
+    original_words_stacked_attention_matrix = get_attention_matrix(
+        conll_pd, model=model
+    )
     original_words_unstacked_attentions = torch.unbind(
         original_words_stacked_attention_matrix, dim=1
     )
@@ -63,7 +67,7 @@ if __name__ == "__main__":
     # Use BERTviz to visualize the attention
     from bertviz import model_view
 
-    # convert attention into (batch_size(must be 1), num_heads, sequence_length, sequence_length)
+    # Convert attention into (batch_size(must be 1), num_heads, sequence_length, sequence_length)
     model_view(
         attention=original_words_unstacked_attentions,
         tokens=words,
