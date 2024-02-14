@@ -7,6 +7,7 @@ from attention.conll import parse_to_conllu
 
 def test_join_subwords():
     import torch
+
     from attention.max_attention_weights import join_subwords
 
     words_to_tokenized_words = [
@@ -65,5 +66,6 @@ def test_join_subwords():
 
     max = join_subwords(attention_matrix, words_to_tokenized_words)
     assert torch.allclose(max, expected)
+
 
 # %%

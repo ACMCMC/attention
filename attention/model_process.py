@@ -2,15 +2,12 @@
 # Load model directly
 import torch
 import transformers
-from transformers import PreTrainedModel, AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedModel
 
 from attention.conll import parse_to_conllu
-
 # %%
-from attention.max_attention_weights import (
-    heads_matching_relation,
-    max_attention_weights,
-)
+from attention.max_attention_weights import (heads_matching_relation,
+                                             max_attention_weights)
 
 
 def get_attention_matrix(conll_pd, model: PreTrainedModel):

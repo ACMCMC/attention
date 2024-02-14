@@ -1,6 +1,8 @@
 # %%
 import torch
+
 from attention.max_attention_weights import max_attention_weights
+
 
 def get_relative_variability_std_dev(attentions_matrix: torch.Tensor):
     """
@@ -35,6 +37,7 @@ def get_relative_variability_std_dev(attentions_matrix: torch.Tensor):
     std_dev = average_relative_position.std(dim=-1)
     return std_dev
 
+
 # %%
 def get_relative_variability(attentions_matrix: torch.Tensor):
     max_attentions = max_attention_weights(attentions_matrix)
@@ -42,9 +45,9 @@ def get_relative_variability(attentions_matrix: torch.Tensor):
     # subtract 0,1,2,3,4,... from each row
     # First, generate a tensor of the same shape as the last dimension of the attention matrix
     sequence_length = attentions_matrix.size()[-1]
-    positions_matrix = torch.tensor(
-        [i for i in range(sequence_length)]
-    ).type(torch.FloatTensor)
+    positions_matrix = torch.tensor([i for i in range(sequence_length)]).type(
+        torch.FloatTensor
+    )
 
     # Now, subtract the positions matrix from the max_attentions matrix
     relative_positions = max_attentions - positions_matrix
@@ -58,6 +61,8 @@ def get_relative_variability(attentions_matrix: torch.Tensor):
     std_dev[torch.isnan(std_dev)] = 0
 
     return std_dev
+
+
 # %%
 def get_absolute_variability(attentions_matrix: torch.Tensor):
     max_attentions = max_attention_weights(attentions_matrix)
@@ -65,9 +70,9 @@ def get_absolute_variability(attentions_matrix: torch.Tensor):
     # subtract 0,1,2,3,4,... from each row
     # First, generate a tensor of the same shape as the last dimension of the attention matrix
     sequence_length = attentions_matrix.size()[-1]
-    positions_matrix = torch.tensor(
-        [i for i in range(sequence_length)]
-    ).type(torch.FloatTensor)
+    positions_matrix = torch.tensor([i for i in range(sequence_length)]).type(
+        torch.FloatTensor
+    )
 
     # Now, get the standard deviation of the relative positions
     std_dev = positions_matrix.std(dim=-1)
@@ -76,6 +81,7 @@ def get_absolute_variability(attentions_matrix: torch.Tensor):
     std_dev = std_dev / std_dev.max()
 
     return std_dev
+
 
 def get_combined_variability(attentions_matrix: torch.Tensor):
     # Min of relative and absolute

@@ -3,6 +3,7 @@
 # Use pytest to run this file
 
 import torch
+
 from attention.variability import get_relative_variability
 
 
@@ -36,6 +37,7 @@ def test_std_dev_non0():
     std_dev = get_relative_variability(attention_matrix)
     assert torch.all(std_dev != 0)
 
+
 def test_batch():
     random_attn = torch.rand([3, 3, 3, 3]).softmax(dim=-1)
     identity_attn = torch.tensor(
@@ -49,4 +51,6 @@ def test_batch():
 
     assert torch.all(result[0] != 0)
     assert torch.all(result[1] == 0)
+
+
 # %%

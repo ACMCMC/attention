@@ -1,63 +1,67 @@
 # %%
 # Evaluate the model on the GLUE dataset
+import os
+
 import datasets
-from attention.conll import parse_to_conllu
-from attention.model_process import get_attention_matrix
-from attention.max_attention_weights import (
-    max_attention_weights,
-    heads_matching_relation,
-)
-from attention.variability import get_relative_variability
-import torch
-from attention.conll import load_conllu_file
 import pandas as pd
+import torch
+from transformers import PreTrainedModel
+
+from attention.conll import load_conllu_file, parse_to_conllu
+from attention.max_attention_weights import (
+    heads_matching_relation,
+    max_attention_weights,
+)
+from attention.model_process import get_attention_matrix
+from attention.variability import get_relative_variability
 
 
 def eval_glue(model):
     conll_dataset = datasets.load_dataset("glue", "cola", split="test")
     get_matching_heads_sentence = generate_fn_get_matching_heads_sentence(model)
-    heads_matching_sentence = conll_dataset.map(get_matching_heads_sentence, batched=False)
-    
+    heads_matching_sentence = conll_dataset.map(
+        get_matching_heads_sentence, batched=False
+    )
+
     # Plot the relations
-    plot_relations(heads_matching_sentence)
+    plot_relations(heads_matching_sentence, model=model, display=False)
 
 
 def eval_ud(model, path_to_conll_dataset):
-    conll_phrases = load_conllu_file(
-        path_to_conll_dataset
-    )
-    #conll_dataset = datasets.Dataset.from_list(
+    conll_phrases = load_conllu_file(path_to_conll_dataset)
+    # conll_dataset = datasets.Dataset.from_list(
     #    conll_phrases,
-        #features=datasets.Features(
-        #    {
-        #        'id': datasets.Value('string'),
-        #        "form": datasets.Value("string"),
-        #        "lemma": datasets.Value("string"),
-        #        "upos": datasets.Value("string"),
-        #        "xpos": datasets.Value("string"),
-        #        "feats": datasets.Value("string"),
-        #        "head": datasets.Value("int32"),
-        #        "deprel": datasets.Value("string"),
-        #        "deps": datasets.Value("string"),
-        #        #'misc': datasets.Value("string"),
-        #    }
-        #),
-    #)
+    # features=datasets.Features(
+    #    {
+    #        'id': datasets.Value('string'),
+    #        "form": datasets.Value("string"),
+    #        "lemma": datasets.Value("string"),
+    #        "upos": datasets.Value("string"),
+    #        "xpos": datasets.Value("string"),
+    #        "feats": datasets.Value("string"),
+    #        "head": datasets.Value("int32"),
+    #        "deprel": datasets.Value("string"),
+    #        "deps": datasets.Value("string"),
+    #        #'misc': datasets.Value("string"),
+    #    }
+    # ),
+    # )
 
     get_matching_heads_sentence = generate_fn_get_matching_heads_sentence(model)
     heads_matching_sentence = [get_matching_heads_sentence(e) for e in conll_phrases]
-    
+
     # Plot the relations
-    plot_relations(heads_matching_sentence)
+    plot_relations(heads_matching_sentence, model=model, display=False)
 
 
 # %%
 def generate_fn_get_matching_heads_sentence(model):
     """
     Returns a function that takes a sentence and returns the heads matching each relation.
-    
+
     We need to generate a function because the Datasets.map() function only accepts functions with one argument and we need to pass the model to the function.
     """
+
     def get_matching_heads_sentence(example):
         # Does the example contain a sentence literal or a list of dicts representing a sentence?
         if isinstance(example, list):
@@ -68,12 +72,17 @@ def generate_fn_get_matching_heads_sentence(model):
 
         # Dependencies: a list of the form (dependent_word, head_word, relation)
         dependencies = [
-            (row.index, conll_pd.loc[row["HEAD"] == conll_pd.index].index, row["DEPREL"])
+            (
+                row.index,
+                conll_pd.loc[row["HEAD"] == conll_pd.index].index,
+                row["DEPREL"],
+            )
             for _, row in conll_pd.iterrows()
             if row["HEAD"] > -1
         ]
         dependencies_head_and_dependant = [
-            (dependent_word, head_word) for (dependent_word, head_word, _) in dependencies
+            (dependent_word, head_word)
+            for (dependent_word, head_word, _) in dependencies
         ]
         dependencies_reltype = [relation for (_, _, relation) in dependencies]
 
@@ -109,11 +118,12 @@ def generate_fn_get_matching_heads_sentence(model):
             "dependencies_head_and_dependant": dependencies_head_and_dependant,
             "dependencies_reltype": dependencies_reltype,
         }
+
     return get_matching_heads_sentence
 
 
 # %%
-def plot_relations(heads_matching_sentence):
+def plot_relations(heads_matching_sentence, model: PreTrainedModel, display=True):
     # Get all unique values for the relation
     # The relation is in the last position of the tuple 'dependencies'
     # The result is a list of strings
@@ -125,18 +135,19 @@ def plot_relations(heads_matching_sentence):
     unique_relations = set(relations)
 
     # Plot a 2D matrix with the heads matching each relation. The color of each cell is the number of heads matching that relation
-    import seaborn as sns
     import matplotlib.pyplot as plt
+    import seaborn as sns
 
     # Create a matrix with the number of heads matching each relation
     # The matrix is of size [num_layers, num_heads]
     # Use the counter to fill the matrix
-    from attention.model_process import model
 
     num_layers = model.config.num_hidden_layers
     num_heads = model.config.num_attention_heads
     for relation in unique_relations:
-        matrix = [[0 for _ in range(num_heads)] for _ in range(num_layers)]
+        matrix = torch.tensor(
+            [[0 for _ in range(num_heads)] for _ in range(num_layers)]
+        )
         # opacity matrix is a tensor of size [num_layers, num_heads] with all zeros
         opacity_matrix = torch.zeros((num_layers, num_heads))
         total_words_matching_relation = 0
@@ -150,7 +161,8 @@ def plot_relations(heads_matching_sentence):
                 if dependency == relation:
                     matrix[layer][head] += 1
             for (dependant, head), dependency in zip(
-                example["dependencies_head_and_dependant"], example["dependencies_reltype"]
+                example["dependencies_head_and_dependant"],
+                example["dependencies_reltype"],
             ):
                 if model.config.model_type == "bloom":
                     # For decoder-only models, the dependant has to be posterior to the head, otherwise the attention is not possible
@@ -197,7 +209,17 @@ def plot_relations(heads_matching_sentence):
         #    # mask=inverted_opacity_matrix < 0.5,
         #    alpha=1.0 - opacity_matrix,
         # )
+
+        # If the directory does not exist, create it
+        if not os.path.exists("figures"):
+            os.makedirs("figures")
+
         # Store it as a PDF
-        plt.savefig(f"heads_matching_{relation}_{model.config.model_type}.pdf")
-        plt.show()
+        plt.savefig(f"figures/heads_matching_{relation}_{model.config.model_type}.pdf")
+        if display:
+            plt.show()
+        # Reset the plot
+        plt.clf()
+
+
 # %%
