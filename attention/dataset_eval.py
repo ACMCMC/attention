@@ -221,5 +221,16 @@ def plot_relations(heads_matching_sentence, model: PreTrainedModel, display=True
         # Reset the plot
         plt.clf()
 
+        # Also store the matrix as a CSV
+        matrix_df = pd.DataFrame(matrix)
+        # Index column: layer
+        matrix_df.index = [f"layer_{i}" for i in range(num_layers)]
+        # Set the column names to the 'head_'+head number
+        matrix_df.columns = [f"head_{i}" for i in range(num_heads)]
+        matrix_df.to_csv(
+            f"figures/heads_matching_{relation}_{model.config.model_type}.csv",
+            index=True,
+        )
+
 
 # %%
