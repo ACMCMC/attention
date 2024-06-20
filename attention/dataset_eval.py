@@ -6,6 +6,7 @@ import datasets
 import pandas as pd
 import torch
 from transformers import PreTrainedModel
+import tqdm
 
 from attention.conll import load_conllu_file, parse_to_conllu
 from attention.max_attention_weights import (
@@ -14,6 +15,26 @@ from attention.max_attention_weights import (
 )
 from attention.model_process import get_attention_matrix
 from attention.variability import get_relative_variability
+import logging
+
+
+logger = logging.getLogger(__file__)
+logger.setLevel(logging.DEBUG)
+
+
+# Sometimes, there's very unfrequent relations, so if there's less than this number of relations present in the analyzed data, we don't output a diagram on that
+MIN_WORDS_MATCHING_RELATION = 0
+# In decoder models, relations like this:
+# "I am human", where DEPENDANT=human and HEAD=am
+# can be modeled.
+# However, these models can't "attend to" the future.
+# So it would be impossible to obserb the following attention pattern:
+# "the green house", where DEPENDANT=green and HEAD=house
+# This is because the head comes after the dependant.
+# i.e. to obserb the relation, the head needs to come before
+# If this parameter is enabled, we also consider a "hit" the fact that HEAD attends to DEPENDANT
+# This is in line with current literature.
+ACCEPT_BIDIRECTIONAL_RELATIONS = True
 
 
 def eval_glue(model):
@@ -47,8 +68,13 @@ def eval_ud(model, path_to_conll_dataset):
     # ),
     # )
 
+    logger.info(f"About to process {len(conll_phrases)} examples...")
+
     get_matching_heads_sentence = generate_fn_get_matching_heads_sentence(model)
-    heads_matching_sentence = [get_matching_heads_sentence(e) for e in conll_phrases]
+    phrases_iterator = tqdm.tqdm(conll_phrases, unit="phrase")
+    heads_matching_sentence = [
+        get_matching_heads_sentence(e) for e in phrases_iterator
+    ]
 
     # Plot the relations
     plot_relations(heads_matching_sentence, model=model, display=False)
@@ -73,11 +99,11 @@ def generate_fn_get_matching_heads_sentence(model):
         # Dependencies: a list of the form (dependent_word, head_word, relation)
         dependencies = [
             (
-                row.index,
-                conll_pd.loc[row["HEAD"] == conll_pd.index].index,
+                index,
+                conll_pd.loc[row["HEAD"] == conll_pd.index].index.item(),
                 row["DEPREL"],
             )
-            for _, row in conll_pd.iterrows()
+            for index, row in conll_pd.iterrows()
             if row["HEAD"] > -1
         ]
         dependencies_head_and_dependant = [
@@ -89,7 +115,11 @@ def generate_fn_get_matching_heads_sentence(model):
         # Take all the words in the sentence and get the heads matching the relation
         attention_matrix = get_attention_matrix(conll_pd=conll_pd, model=model)
         max_weights = max_attention_weights(attention_matrix)
-        heads_matching_rel = heads_matching_relation(conll_pd, max_weights)
+        heads_matching_rel = heads_matching_relation(
+            conll_pd,
+            max_weights,
+            accept_bidirectional_relations=ACCEPT_BIDIRECTIONAL_RELATIONS,
+        )
         # The result is a list of tuples (layer, head, head_word, dependent_word)
         # Only keep the tuples that have a dependent_word matching the relation
         # For every tuple, get the dependent_word and check if it matches the relation. The dependent_word is in position 3, and it is a string, so we need to get the row with that word in the column FORM and check its DEPREL
@@ -117,6 +147,7 @@ def generate_fn_get_matching_heads_sentence(model):
             "matching_heads_variability": matching_heads_variability,
             "dependencies_head_and_dependant": dependencies_head_and_dependant,
             "dependencies_reltype": dependencies_reltype,
+            "forms": conll_pd["FORM"],
         }
 
     return get_matching_heads_sentence
@@ -154,29 +185,35 @@ def plot_relations(heads_matching_sentence, model: PreTrainedModel, display=True
         total_words = 0
         for example in heads_matching_sentence:
             # Join matching_heads_layer_and_head and matching_heads_dependency to get the tuple
-            for (layer, head), dependency in zip(
+            for (layer, head_position), dependency in zip(
                 example["matching_heads_layer_and_head"],
                 example["matching_heads_dependency"],
             ):
                 if dependency == relation:
-                    matrix[layer][head] += 1
-            for (dependant, head), dependency in zip(
+                    matrix[layer][head_position] += 1
+            for (dependant_position, head_position), dependency in zip(
                 example["dependencies_head_and_dependant"],
                 example["dependencies_reltype"],
             ):
                 if model.config.model_type == "bloom":
                     # For decoder-only models, the dependant has to be posterior to the head, otherwise the attention is not possible
-                    if dependant < head:
+                    if dependant_position < head_position and (
+                        not ACCEPT_BIDIRECTIONAL_RELATIONS
+                    ):
+                        # We don't accept bidirectional relations, so it's impossible that we'll have an attention pattern DEPENDANT -> HEAD
+                        logger.debug(
+                            f'Skipping the dependency between {dependant_position} -> {head_position} ({example["forms"][dependant_position]} -> {example["forms"][head_position]})'
+                        )
                         continue
                 if dependency == relation:
                     total_words_matching_relation += 1
-            for (layer, head), variability in zip(
+            for (layer, head_position), variability in zip(
                 example["matching_heads_layer_and_head"],
                 example["matching_heads_variability"],
             ):
-                opacity_matrix[layer, head] += variability
+                opacity_matrix[layer, head_position] += variability
             total_words += len(example["dependencies_reltype"])
-        if total_words_matching_relation < 25:
+        if total_words_matching_relation < MIN_WORDS_MATCHING_RELATION:
             continue
         # opacity_matrix /= total_words  # Get the average variability for each layer and head
         # Divide the opacity matrix by the maximum value to normalize it
@@ -196,6 +233,10 @@ def plot_relations(heads_matching_sentence, model: PreTrainedModel, display=True
             vmax=total_words_matching_relation,
             annot=True,
             alpha=1.0 - opacity_matrix,
+            # Text size: 6
+            annot_kws={"size": 6},
+            # Do not use scientific notation
+            fmt="g",
         )
 
         # Add the opacity matrix as a mask
