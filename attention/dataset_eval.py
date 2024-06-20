@@ -23,7 +23,7 @@ logger.setLevel(logging.DEBUG)
 
 
 # Sometimes, there's very unfrequent relations, so if there's less than this number of relations present in the analyzed data, we don't output a diagram on that
-MIN_WORDS_MATCHING_RELATION = 0
+MIN_WORDS_MATCHING_RELATION = 25
 # In decoder models, relations like this:
 # "I am human", where DEPENDANT=human and HEAD=am
 # can be modeled.
