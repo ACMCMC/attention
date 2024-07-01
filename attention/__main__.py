@@ -17,5 +17,11 @@ path_to_conll_dataset = os.path.join(
 path_to_conll_dataset = os.path.join(
     os.path.dirname(__file__), "../UD_Spanish-AnCora/es_ancora-ud-test.conllu"
 )
+path_to_conll_dataset = os.path.join(
+    os.path.dirname(__file__), "../UD_Galician-TreeGal/gl_treegal-ud-test.conllu"
+)
+path_to_conll_dataset = os.path.join(
+    os.path.dirname(__file__), "../UD_French-Sequoia/fr_sequoia-ud-test.conllu"
+)
 
 eval_ud(model=model, path_to_conll_dataset=path_to_conll_dataset)
