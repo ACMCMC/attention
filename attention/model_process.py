@@ -2,7 +2,7 @@
 # Load model directly
 import torch
 import transformers
-from transformers import AutoTokenizer, PreTrainedModel
+from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from attention.conll import parse_to_conllu
 
@@ -13,7 +13,7 @@ from attention.max_attention_weights import (
 )
 
 
-def get_attention_matrix(conll_pd, model: PreTrainedModel):
+def get_attention_matrix(conll_pd, model: PreTrainedModel, tokenizer: PreTrainedTokenizer):
     """
     Get the attention matrix for a given phrase
 
@@ -26,7 +26,6 @@ def get_attention_matrix(conll_pd, model: PreTrainedModel):
     """
     words = conll_pd["FORM"].tolist()
     # Get the tokenizer from the model
-    tokenizer = AutoTokenizer.from_pretrained(model.name_or_path)
     tokenized_words = tokenizer(words)["input_ids"]
     words_to_tokenized_words = list(zip(words, tokenized_words))
     # Concatenate the list of lists into a single tensor
@@ -39,6 +38,9 @@ def get_attention_matrix(conll_pd, model: PreTrainedModel):
     # Get the attention values from the model
     model.eval()
     with torch.no_grad():
+        # If the model is on the GPU, move the input to the GPU
+        if model.device.type == "cuda":
+            input_ids = input_ids.cuda()
         outputs = model(input_ids=input_ids, output_attentions=True)
 
     # Returns a tuple with the attention tensors, one for each layer
@@ -53,7 +55,7 @@ def get_attention_matrix(conll_pd, model: PreTrainedModel):
         stacked_attentions, words_to_tokenized_words
     )
 
-    return original_words_stacked_attention_matrix
+    return original_words_stacked_attention_matrix.cpu()
 
 
 # %%

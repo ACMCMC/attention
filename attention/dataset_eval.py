@@ -10,7 +10,7 @@ import datasets
 import pandas as pd
 import torch
 import tqdm
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from attention.conll import load_conllu_file, parse_to_conllu
 from attention.max_attention_weights import (heads_matching_relation,
@@ -49,7 +49,7 @@ def eval_glue(model):
 
 
 def eval_ud(
-    model, path_to_conll_dataset, output_dir=Path(__file__).parent.parent / "results"
+    model, tokenizer, path_to_conll_dataset, output_dir=Path(__file__).parent.parent / "results"
 ):
     # Recreate the output dir - if it exists, delete it
     if os.path.exists(output_dir):
@@ -77,9 +77,9 @@ def eval_ud(
 
     logger.info(f"About to process {len(conll_phrases)} examples...")
 
-    conll_phrases = conll_phrases[:10]
+    # conll_phrases = conll_phrases[:10]
 
-    get_matching_heads_sentence = generate_fn_get_matching_heads_sentence(model)
+    get_matching_heads_sentence = generate_fn_get_matching_heads_sentence(model, tokenizer)
     phrases_iterator = tqdm.tqdm(conll_phrases, unit="phrase")
     heads_matching_sentence = [get_matching_heads_sentence(e) for e in phrases_iterator]
 
@@ -103,7 +103,7 @@ def eval_ud(
 
 
 # %%
-def generate_fn_get_matching_heads_sentence(model):
+def generate_fn_get_matching_heads_sentence(model: PreTrainedModel, tokenizer: PreTrainedTokenizer):
     """
     Returns a function that takes a sentence and returns the heads matching each relation.
 
@@ -135,7 +135,7 @@ def generate_fn_get_matching_heads_sentence(model):
         dependencies_reltype = [relation for (_, _, relation) in dependencies]
 
         # Take all the words in the sentence and get the heads matching the relation
-        attention_matrix = get_attention_matrix(conll_pd=conll_pd, model=model)
+        attention_matrix = get_attention_matrix(conll_pd=conll_pd, model=model, tokenizer=tokenizer)
         max_weights = max_attention_weights(attention_matrix)
         heads_matching_rel = heads_matching_relation(
             conll_pd,
