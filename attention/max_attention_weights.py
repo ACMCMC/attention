@@ -5,7 +5,6 @@ We assign a relation between word wi and wj if j = argmax W[i] for each row (tha
 """
 
 import pandas as pd
-
 # %%
 import torch
 

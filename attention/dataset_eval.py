@@ -2,6 +2,8 @@
 # Evaluate the model on the GLUE dataset
 import logging
 import os
+import shutil
+from pathlib import Path
 from typing import Any, Dict, List
 
 import datasets
@@ -11,10 +13,8 @@ import tqdm
 from transformers import PreTrainedModel
 
 from attention.conll import load_conllu_file, parse_to_conllu
-from attention.max_attention_weights import (
-    heads_matching_relation,
-    max_attention_weights,
-)
+from attention.max_attention_weights import (heads_matching_relation,
+                                             max_attention_weights)
 from attention.model_process import get_attention_matrix
 from attention.variability import get_relative_variability
 
@@ -48,7 +48,14 @@ def eval_glue(model):
     plot_relations(heads_matching_sentence, model=model, display=False)
 
 
-def eval_ud(model, path_to_conll_dataset):
+def eval_ud(
+    model, path_to_conll_dataset, output_dir=Path(__file__).parent.parent / "results"
+):
+    # Recreate the output dir - if it exists, delete it
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+
     conll_phrases = load_conllu_file(path_to_conll_dataset)
     # conll_dataset = datasets.Dataset.from_list(
     #    conll_phrases,
@@ -77,10 +84,22 @@ def eval_ud(model, path_to_conll_dataset):
     heads_matching_sentence = [get_matching_heads_sentence(e) for e in phrases_iterator]
 
     # Plot the relations
-    plot_relations(heads_matching_sentence, model=model, display=False)
+    plot_relations(
+        heads_matching_sentence, model=model, display=False, output_dir=output_dir
+    )
 
     uas = calculate_uas(heads_matching_sentence)
-    logger.info(f"UAS: {uas}")
+    # Output structure:
+    # {
+    #    'relation1': torch.Tensor([num_layers, num_heads]),
+    #    'relation2': torch.Tensor([num_layers, num_heads]),
+    #    ...
+    # }
+    # Save the UAS to a CSV file
+    for relation, uas_matrix in uas.items():
+        uas_df = pd.DataFrame(uas_matrix.numpy())
+        os.makedirs(output_dir / "uas_scores", exist_ok=True)
+        uas_df.to_csv(output_dir / "uas_scores" / f"uas_{relation}.csv")
 
 
 # %%
@@ -158,7 +177,12 @@ def generate_fn_get_matching_heads_sentence(model):
 
 
 # %%
-def plot_relations(heads_matching_sentence, model: PreTrainedModel, display=True):
+def plot_relations(
+    heads_matching_sentence,
+    model: PreTrainedModel,
+    display=True,
+    output_dir=(Path(__file__).parent.parent / "results"),
+):
     # Get all unique values for the relation
     # The relation is in the last position of the tuple 'dependencies'
     # The result is a list of strings
@@ -256,11 +280,15 @@ def plot_relations(heads_matching_sentence, model: PreTrainedModel, display=True
         # )
 
         # If the directory does not exist, create it
-        if not os.path.exists("figures"):
-            os.makedirs("figures")
+        os.makedirs(output_dir / "figures", exist_ok=True)
+        os.makedirs(output_dir / "csv", exist_ok=True)
 
         # Store it as a PDF
-        plt.savefig(f"figures/heads_matching_{relation}_{model.config.model_type}.pdf")
+        plt.savefig(
+            output_dir
+            / "figures"
+            / f"heads_matching_{relation}_{model.config.model_type}.pdf"
+        )
         if display:
             plt.show()
         # Reset the plot
@@ -273,12 +301,16 @@ def plot_relations(heads_matching_sentence, model: PreTrainedModel, display=True
         # Set the column names to the 'head_'+head number
         matrix_df.columns = [f"head_{i}" for i in range(num_heads)]
         matrix_df.to_csv(
-            f"figures/heads_matching_{relation}_{model.config.model_type}.csv",
+            output_dir
+            / "csv"
+            / f"heads_matching_{relation}_{model.config.model_type}.csv",
             index=True,
         )
 
 
-def calculate_uas(heads_matching_sentence: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
+def calculate_uas(
+    heads_matching_sentence: List[Dict[str, Any]]
+) -> Dict[str, torch.Tensor]:
     """
     Calculate the Unlabeled Attachment Score (UAS) of the model on the dataset.
 
@@ -302,7 +334,9 @@ def calculate_uas(heads_matching_sentence: List[Dict[str, Any]]) -> Dict[str, to
     num_layers = heads_matching_sentence[0]["max_attention_weights"].shape[-3]
     num_heads = heads_matching_sentence[0]["max_attention_weights"].shape[-2]
 
-    number_of_heads_matching_sentence_per_dependency = {} # This stores a matrix per dependency type, head and layer with the number of heads matching the relation
+    number_of_heads_matching_sentence_per_dependency = (
+        {}
+    )  # This stores a matrix per dependency type, head and layer with the number of heads matching the relation
 
     total_tokens = 0
 
@@ -311,13 +345,16 @@ def calculate_uas(heads_matching_sentence: List[Dict[str, Any]]) -> Dict[str, to
         # Here, we get the dependency type, head and layer for each word matching the relation
         # And we add 1 to the entry in the matrix for that dependency type, head and layer
         for (layer, head), dependency in zip(
-            example["matching_heads_layer_and_head"], example["matching_heads_dependency"]
+            example["matching_heads_layer_and_head"],
+            example["matching_heads_dependency"],
         ):
             if dependency not in number_of_heads_matching_sentence_per_dependency:
-                number_of_heads_matching_sentence_per_dependency[dependency] = torch.zeros(
-                    (num_layers, num_heads)
+                number_of_heads_matching_sentence_per_dependency[dependency] = (
+                    torch.zeros((num_layers, num_heads))
                 )
-            number_of_heads_matching_sentence_per_dependency[dependency][layer, head] += 1
+            number_of_heads_matching_sentence_per_dependency[dependency][
+                layer, head
+            ] += 1
 
         total_tokens += example["max_attention_weights"].shape[-1]
 

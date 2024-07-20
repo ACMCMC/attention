@@ -1,5 +1,6 @@
 # %%
 import os
+from pathlib import Path
 
 import transformers
 
@@ -27,8 +28,12 @@ path_to_conll_dataset = os.path.join(
 path_to_conll_dataset = os.path.join(
     os.path.dirname(__file__), "../UD_Turkish-Penn-master/tr_penn-ud-test.conllu"
 )
-path_to_conll_dataset = os.path.join(
-    os.path.dirname(__file__), "../UD_Basque-BDT-master/eu_bdt-ud-test.conllu"
+path_to_conll_dataset = (
+    Path(__file__).parent.parent / "UD_Basque-BDT-master" / "eu_bdt-ud-test.conllu"
 )
 
-eval_ud(model=model, path_to_conll_dataset=path_to_conll_dataset)
+eval_ud(
+    model=model,
+    path_to_conll_dataset=path_to_conll_dataset,
+    output_dir=Path(__file__).parent.parent / "results_eu",
+)
