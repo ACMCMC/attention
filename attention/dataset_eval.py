@@ -79,6 +79,9 @@ def eval_ud(model, path_to_conll_dataset):
     # Plot the relations
     plot_relations(heads_matching_sentence, model=model, display=False)
 
+    uas = calculate_uas(heads_matching_sentence)
+    logger.info(f"UAS: {uas}")
+
 
 # %%
 def generate_fn_get_matching_heads_sentence(model):
@@ -273,5 +276,35 @@ def plot_relations(heads_matching_sentence, model: PreTrainedModel, display=True
             index=True,
         )
 
+
+def calculate_uas(heads_matching_sentence):
+    """
+    Calculate the Unlabeled Attachment Score (UAS) of the model on the dataset.
+
+    The UAS is the number of correctly predicted heads divided by the total number of words in the dataset.
+
+    The UAS is calculated as follows:
+    - For each word in the dataset, check if the head predicted by the model matches the actual head.
+    - If it matches, increment the number of correct words.
+    - At the end, divide the number of correct words by the total number of words in the dataset.
+
+    The input is a list of dictionaries, each containing the following keys:
+    - 'matching_heads_layer_and_head': a list of tuples (layer, head) with the heads matching each relation
+    - 'dependencies_head_and_dependant': a list of tuples (dependent_word, head_word) with the actual heads
+    - 'dependencies_reltype': a list of strings with the relations
+    """
+
+    correct_words = 0
+    total_words = 0
+    for example in heads_matching_sentence:
+        for (layer, head_position), (dependant_position, head_position) in zip(
+            example["matching_heads_layer_and_head"],
+            example["dependencies_head_and_dependant"],
+        ):
+            if dependant_position == head_position:
+                correct_words += 1
+            total_words += 1
+
+    return correct_words / total_words
 
 # %%
