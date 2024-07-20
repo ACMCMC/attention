@@ -11,6 +11,16 @@ from attention.max_attention_weights import (heads_matching_relation,
 
 
 def get_attention_matrix(conll_pd, model: PreTrainedModel):
+    """
+    Get the attention matrix for a given phrase
+
+    Args:
+        conll_pd (pandas.DataFrame): CoNLL-U format DataFrame
+        model (PreTrainedModel): Model to get the attention from
+
+    Returns:
+        torch.Tensor: Attention matrix for the phrase. Shape: [batch_size, num_layers, num_heads, sequence_length, sequence_length]
+    """
     words = conll_pd["FORM"].tolist()
     # Get the tokenizer from the model
     tokenizer = AutoTokenizer.from_pretrained(model.name_or_path)

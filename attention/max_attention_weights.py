@@ -15,10 +15,10 @@ def max_attention_weights(attention_matrix):
     Returns the maximum attention weights for each row in the attention matrix
 
     Args:
-        attention_matrix (torch.Tensor): Attention matrix of shape [batch_size, num_heads, sequence_length, sequence_length]
+        attention_matrix (torch.Tensor): Attention matrix of shape [batch_size, num_layers, num_heads, sequence_length, sequence_length]
 
     Returns:
-        torch.Tensor: Maximum attention weights for each row in the attention matrix
+        torch.Tensor: Maximum attention weights for each row in the attention matrix. Shape: [batch_size, num_layers, num_heads, sequence_length]
     """
     max = torch.max(attention_matrix, dim=-1)
     return max.indices

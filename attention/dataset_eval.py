@@ -1,12 +1,14 @@
 # %%
 # Evaluate the model on the GLUE dataset
+import logging
 import os
+from typing import Any, Dict, List
 
 import datasets
 import pandas as pd
 import torch
-from transformers import PreTrainedModel
 import tqdm
+from transformers import PreTrainedModel
 
 from attention.conll import load_conllu_file, parse_to_conllu
 from attention.max_attention_weights import (
@@ -15,8 +17,6 @@ from attention.max_attention_weights import (
 )
 from attention.model_process import get_attention_matrix
 from attention.variability import get_relative_variability
-import logging
-
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.DEBUG)
@@ -70,11 +70,11 @@ def eval_ud(model, path_to_conll_dataset):
 
     logger.info(f"About to process {len(conll_phrases)} examples...")
 
+    conll_phrases = conll_phrases[:10]
+
     get_matching_heads_sentence = generate_fn_get_matching_heads_sentence(model)
     phrases_iterator = tqdm.tqdm(conll_phrases, unit="phrase")
-    heads_matching_sentence = [
-        get_matching_heads_sentence(e) for e in phrases_iterator
-    ]
+    heads_matching_sentence = [get_matching_heads_sentence(e) for e in phrases_iterator]
 
     # Plot the relations
     plot_relations(heads_matching_sentence, model=model, display=False)
@@ -151,6 +151,7 @@ def generate_fn_get_matching_heads_sentence(model):
             "dependencies_head_and_dependant": dependencies_head_and_dependant,
             "dependencies_reltype": dependencies_reltype,
             "forms": conll_pd["FORM"],
+            "max_attention_weights": max_weights,
         }
 
     return get_matching_heads_sentence
@@ -277,7 +278,7 @@ def plot_relations(heads_matching_sentence, model: PreTrainedModel, display=True
         )
 
 
-def calculate_uas(heads_matching_sentence):
+def calculate_uas(heads_matching_sentence: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
     """
     Calculate the Unlabeled Attachment Score (UAS) of the model on the dataset.
 
@@ -292,19 +293,41 @@ def calculate_uas(heads_matching_sentence):
     - 'matching_heads_layer_and_head': a list of tuples (layer, head) with the heads matching each relation
     - 'dependencies_head_and_dependant': a list of tuples (dependent_word, head_word) with the actual heads
     - 'dependencies_reltype': a list of strings with the relations
+    - 'max_attention_weights': a tensor with the maximum attention weights for each row in the attention matrix
+
+    We return the UAS for each dependency type, head and layer. The format is a dictionary with the dependency type as the key and a tensor of shape [num_layers, num_heads] as the UAS for that dependency type.
     """
 
-    correct_words = 0
-    total_words = 0
-    for example in heads_matching_sentence:
-        for (layer, head_position), (dependant_position, head_position) in zip(
-            example["matching_heads_layer_and_head"],
-            example["dependencies_head_and_dependant"],
-        ):
-            if dependant_position == head_position:
-                correct_words += 1
-            total_words += 1
+    # First, get the total number of layers and heads. We can inspect the first example
+    num_layers = heads_matching_sentence[0]["max_attention_weights"].shape[-3]
+    num_heads = heads_matching_sentence[0]["max_attention_weights"].shape[-2]
 
-    return correct_words / total_words
+    number_of_heads_matching_sentence_per_dependency = {} # This stores a matrix per dependency type, head and layer with the number of heads matching the relation
+
+    total_tokens = 0
+
+    # Now, for each dependency type, head and layer, calculate the UAS
+    for example in heads_matching_sentence:
+        # Here, we get the dependency type, head and layer for each word matching the relation
+        # And we add 1 to the entry in the matrix for that dependency type, head and layer
+        for (layer, head), dependency in zip(
+            example["matching_heads_layer_and_head"], example["matching_heads_dependency"]
+        ):
+            if dependency not in number_of_heads_matching_sentence_per_dependency:
+                number_of_heads_matching_sentence_per_dependency[dependency] = torch.zeros(
+                    (num_layers, num_heads)
+                )
+            number_of_heads_matching_sentence_per_dependency[dependency][layer, head] += 1
+
+        total_tokens += example["max_attention_weights"].shape[-1]
+
+    # Now, we have the number of heads matching each relation for each layer and head
+    # We can calculate the UAS for each relation
+    uas_per_dependency = {}
+    for dependency, matrix in number_of_heads_matching_sentence_per_dependency.items():
+        uas_per_dependency[dependency] = matrix / total_tokens
+
+    return uas_per_dependency
+
 
 # %%
