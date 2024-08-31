@@ -57,23 +57,7 @@ def eval_ud(
     os.makedirs(output_dir, exist_ok=True)
 
     conll_phrases = load_conllu_file(path_to_conll_dataset)
-    # conll_dataset = datasets.Dataset.from_list(
-    #    conll_phrases,
-    # features=datasets.Features(
-    #    {
-    #        'id': datasets.Value('string'),
-    #        "form": datasets.Value("string"),
-    #        "lemma": datasets.Value("string"),
-    #        "upos": datasets.Value("string"),
-    #        "xpos": datasets.Value("string"),
-    #        "feats": datasets.Value("string"),
-    #        "head": datasets.Value("int32"),
-    #        "deprel": datasets.Value("string"),
-    #        "deps": datasets.Value("string"),
-    #        #'misc': datasets.Value("string"),
-    #    }
-    # ),
-    # )
+    # TODO: Definir mapeado de familias
 
     logger.info(f"About to process {len(conll_phrases)} examples...")
 
@@ -223,6 +207,7 @@ def plot_relations(
                 example["dependencies_head_and_dependant"],
                 example["dependencies_reltype"],
             ):
+                # TODO: Change this to apply to all decoder models
                 if model.config.model_type == "bloom":
                     # For decoder-only models, the dependant has to be posterior to the head, otherwise the attention is not possible
                     if dependant_position < head_position and (
@@ -339,6 +324,7 @@ def calculate_uas(
     )  # This stores a matrix per dependency type, head and layer with the number of heads matching the relation
 
     total_tokens = 0
+    # TODO: Cambiar para que sea una division por el numero de veces que esa relacion aparece en COLNN (numero de hits / numero de veces que aparece en el dataset)
 
     # Now, for each dependency type, head and layer, calculate the UAS
     for example in heads_matching_sentence:
