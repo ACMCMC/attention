@@ -1,89 +1,103 @@
 # %%
+# Load the experiment config from "experiment_config.yaml"
+import yaml
+import logging
 import os
 from pathlib import Path
+from huggingface_hub import HfApi
 
+import mlflow
 import torch
 import transformers
 
-import mlflow
-
 from .dataset_eval import eval_ud
 
-MODELS = [
-    "bert-base-uncased",
-    "microsoft/mdeberta-v3-base",
-    "google-bert/bert-base-multilingual-cased",
-    "bigscience/bloom-560m",
-    "microsoft/Phi-3-mini-4k-instruct",
-    "mistralai/Mistral-7B-v0.1",
-    "meta-llama/Meta-Llama-3.1-8B",
-    "google/gemma-2-9b",
-    "HiTZ/latxa-7b-v1.2",
-    "PlanTL-GOB-ES/roberta-base-bne",
-    "fpuentes/bert-galician",
-    "projecte-aina/FLOR-1.3B",
-    "proxectonos/Carballo-bloom-1.3B",
-]
+logger = logging.getLogger(__name__)
 
-data_en = {
-    "language": "en",
-    "path_to_conll_dataset": Path(__file__).parent.parent
-    / "UD_English-GUM"
-    / "en_gum-ud-test.conllu",
-}
-data_es = {
-    "language": "es",
-    "path_to_conll_dataset": Path(__file__).parent.parent
-    / "UD_Spanish-AnCora"
-    / "es_ancora-ud-test.conllu",
-}
-data_gl = {
-    "language": "gl",
-    "path_to_conll_dataset": Path(__file__).parent.parent
-    / "UD_Galician-TreeGal"
-    / "gl_treegal-ud-test.conllu",
-}
-data_fr = {
-    "language": "fr",
-    "path_to_conll_dataset": Path(__file__).parent.parent
-    / "UD_French-Sequoia"
-    / "fr_sequoia-ud-test.conllu",
-}
-data_tr = {
-    "language": "tr",
-    "path_to_conll_dataset": Path(__file__).parent.parent
-    / "UD_Turkish-Penn-master"
-    / "tr_penn-ud-test.conllu",
-}
-data_eu = {
-    "language": "eu",
-    "path_to_conll_dataset": Path(__file__).parent.parent
-    / "UD_Basque-BDT-master"
-    / "eu_bdt-ud-test.conllu",
-}
-data_ca = {
-    "language": "ca",
-    "path_to_conll_dataset": Path(__file__).parent.parent
-    / "UD_Catalan-AnCora-master"
-    / "ca_ancora-ud-test.conllu",
-}
+with open(Path(__file__).parent.parent / "experiment_config.yaml", "r") as f:
+    experiment_config = yaml.safe_load(f)
+
+mlflow.set_experiment(experiment_config["experiment_name"])
+
+api = HfApi()
+
+# Sometimes, there's very unfrequent relations, so if there's less than this number of relations present in the analyzed data, we don't output a diagram on that
+MIN_WORDS_MATCHING_RELATION = 25
 
 
-for model_name in MODELS:
-    loaded_model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
-    if torch.cuda.is_available():
-        loaded_model.to("cuda")
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
-
-    for data in [data_en, data_es, data_gl, data_fr, data_tr, data_eu, data_ca]:
-        output_dir = Path(__file__).parent.parent / f"results_{data['language']}"
-
-        eval_ud(
-            model=loaded_model,
-            tokenizer=tokenizer,
-            path_to_conll_dataset=data["path_to_conll_dataset"],
-            output_dir=output_dir,
+for language, metadata in experiment_config["languages"].items():
+    with mlflow.start_run(run_name=language) as mlrun:
+        logger.info(f"Running evaluation for {language}...")
+        models_to_evaluate = metadata["models"] + experiment_config.get(
+            "multilingual_models", []
         )
 
-    del loaded_model
-    del tokenizer
+        # In decoder models, relations like this:
+        # "I am human", where DEPENDANT=human and HEAD=am
+        # can be modeled.
+        # However, these models can't "attend to" the future.
+        # So it would be impossible to obserb the following attention pattern:
+        # "the green house", where DEPENDANT=green and HEAD=house
+        # This is because the head comes after the dependant.
+        # i.e. to obserb the relation, the head needs to come before
+        # If this parameter is enabled, we also consider a "hit" the fact that HEAD attends to DEPENDANT
+        # This is in line with current literature.
+        for accept_bidirectional in [True, False]:
+            for model_uri in models_to_evaluate:
+                with mlflow.start_run(
+                    run_name=f"{language}_{model_uri}",
+                    nested=True,
+                    tags={"language": language},
+                ) as mlrun2:
+                    try:
+                        model_name = model_uri.split("/")[-1]
+                        # If this model is not registered in MLFlow, register it
+                        if len(mlflow.search_registered_models(filter_string=f'name="{model_name}"')) == 0:
+                            logger.info(f"Registering model {model_uri}...")
+                            mlflow.register_model(
+                                model_uri=f"transformers://{model_uri}", name=model_name
+                            )
+
+                        mlflow.set_tag("model_uri", model_uri)
+                        mlflow.log_param("metadata", metadata)
+                        mlflow.log_param("accept_bidirectional_relations", accept_bidirectional)
+                        mlflow.log_param("min_words_matching_relation", MIN_WORDS_MATCHING_RELATION)
+
+                        logger.info(f"Loading model {model_uri}...")
+                        # Which one to use: AutoModelForMaskedLM or AutoModelForCausalLM?
+                        # We can use the HFApi to get the model's metadata and if it's a decoder model, we use AutoModelForMaskedLM, otherwise, AutoModelForCausalLM
+                        # model_metadata = api.model_info(model_uri)
+
+                        # For now, we'll just use AutoModel - this will work for both encoder and decoder models
+                        loaded_model = transformers.AutoModel.from_pretrained(
+                            model_uri, trust_remote_code=True
+                        )
+                        if torch.cuda.is_available():
+                            loaded_model.to("cuda")
+                        tokenizer = transformers.AutoTokenizer.from_pretrained(
+                            model_uri, trust_remote_code=True
+                        )
+
+                        output_dir = Path(__file__).parent.parent / f"results_{language}" / model_name
+                        path_to_conll_dataset: Path = (
+                            Path(__file__).parent.parent / metadata["path_to_conll_dataset"]
+                        )
+                        mlflow.set_tag("dataset", path_to_conll_dataset.parent.name)
+
+                        eval_ud(
+                            model=loaded_model,
+                            tokenizer=tokenizer,
+                            path_to_conll_dataset=path_to_conll_dataset,
+                            output_dir=output_dir,
+                            accept_bidirectional_relations=accept_bidirectional,
+                            min_words_matching_relation=MIN_WORDS_MATCHING_RELATION,
+                            trim_dataset_size=1000,  # Minimum size across datasets: 1K (TreeGal)
+                            # trim_dataset_size=10,
+                        )
+
+                        del loaded_model
+                        del tokenizer
+                    except Exception as e:
+                        logger.error(f"Error while evaluating {model_uri}: {e}")
+                        mlflow.log_param("error", str(e))
+                        mlflow.end_run(status="FAILED")

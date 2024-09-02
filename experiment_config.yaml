@@ -1,0 +1,63 @@
+experiment_name: experiment_1
+languages:
+  en:
+    language: en
+    path_to_conll_dataset: UD_English-GUM/en_gum-ud-train.conllu
+    models:
+    - bert-base-uncased
+    - microsoft/Phi-3-mini-4k-instruct
+  gl:
+    language: gl
+    path_to_conll_dataset: UD_Galician-TreeGal/gl_treegal-ud-train.conllu
+    models:
+    - marcosgg/bert-base-gl-cased
+    - proxectonos/Carballo-bloom-1.3B
+    # These models are copied from Portuguese - how do they perform in Galician?
+    - PORTULAN/albertina-900m-portuguese-ptpt-encoder
+    - NOVA-vision-language/GlorIA-1.3B
+  # fr:
+  #   language: fr
+  #   path_to_conll_dataset: UD_French-Sequoia/fr_sequoia-ud-train.conllu
+  #   models:
+  #   - almanach/camembert-base
+  #   - OpenLLM-France/Claire-Mistral-7B-0.1
+  # tr:
+  #   language: tr
+  #   path_to_conll_dataset: UD_Turkish-Penn/tr_penn-ud-train.conllu
+  #   models:
+  #   - loodos/bert-base-turkish-uncased
+  #   - TURKCELL/Turkcell-LLM-7b-v1
+  eu:
+    language: eu
+    path_to_conll_dataset: UD_Basque-BDT/eu_bdt-ud-train.conllu
+    models:
+    - ixa-ehu/berteus-base-cased
+    - HiTZ/latxa-7b-v1.2
+  # ca:
+  #   language: ca
+  #   path_to_conll_dataset: UD_Catalan-AnCora/ca_ancora-ud-train.conllu
+  #   models:
+  #   - PlanTL-GOB-ES/roberta-base-ca
+  #   - projecte-aina/FLOR-1.3B
+  es:
+    language: es
+    path_to_conll_dataset: UD_Spanish-AnCora/es_ancora-ud-train.conllu
+    models:
+    - PlanTL-GOB-ES/roberta-base-bne
+    - clibrain/lince-zero
+  pt:
+    language: pt
+    path_to_conll_dataset: UD_Portuguese-CINTIL/pt_cintil-ud-train.conllu
+    models:
+    - PORTULAN/albertina-900m-portuguese-ptpt-encoder
+    - NOVA-vision-language/GlorIA-1.3B
+    # These models are copied from Galician - how do they perform in Portuguese?
+    - marcosgg/bert-base-gl-cased
+    - proxectonos/Carballo-bloom-1.3B
+multilingual_models:
+- microsoft/mdeberta-v3-base
+- google-bert/bert-base-multilingual-cased
+# - mistralai/Mistral-7B-v0.1
+- meta-llama/Meta-Llama-3.1-8B
+# - google/gemma-2-9b
+- bigscience/bloom-1b7
