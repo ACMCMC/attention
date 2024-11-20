@@ -100,6 +100,8 @@ def eval_ud(
         conll_phrases = random.sample(conll_phrases, trim_dataset_size)
     mlflow.log_param("trimmed_dataset_size", len(conll_phrases))
 
+    conll_phrases = conll_phrases[:10]
+
     logger.info(f"About to process {len(conll_phrases)} examples...")
 
     # conll_phrases = conll_phrases[:10]
@@ -115,7 +117,7 @@ def eval_ud(
         heads_matching_sentence, model=model, display=False, output_dir=output_dir, **kwargs
     )
 
-    uas = calculate_uas(heads_matching_sentence)
+    uas = calculate_uas(heads_matching_sentence, conll_phrases)
     # Output structure:
     # {
     #    'relation1': torch.Tensor([num_layers, num_heads]),
@@ -366,7 +368,8 @@ def plot_relations(
 
 
 def calculate_uas(
-    heads_matching_sentence: List[Dict[str, Any]]
+    heads_matching_sentence: List[Dict[str, Any]],
+    conll_phrases: List[pd.DataFrame],
 ) -> Dict[str, torch.Tensor]:
     """
     Calculate the Unlabeled Attachment Score (UAS) of the model on the dataset.
@@ -419,8 +422,23 @@ def calculate_uas(
     # Now, we have the number of heads matching each relation for each layer and head
     # We can calculate the UAS for each relation
     uas_per_dependency = {}
+
+    # Also, get the possible maximum for each dependency type. For this, use the gold standard (the CONLL-U file)
+    total_relations_per_dependency_in_gold_standard = {
+        dependency: 0 for dependency in number_of_heads_matching_sentence_per_dependency
+    }
+    for conll in conll_phrases:
+        for dependency in total_relations_per_dependency_in_gold_standard:
+            total_relations_per_dependency_in_gold_standard[dependency] += len(
+                conll[conll["DEPREL"] == dependency]
+            )
+
     for dependency, matrix in number_of_heads_matching_sentence_per_dependency.items():
-        uas_per_dependency[dependency] = matrix / total_tokens
+        uas_per_dependency[dependency] = (
+            # Divide the number of correct heads by the total number of relations in the gold standard, which is the maximum possible
+            matrix
+            / total_relations_per_dependency_in_gold_standard[dependency]
+        )
 
     return uas_per_dependency
 
