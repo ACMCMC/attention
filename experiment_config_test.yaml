@@ -1,0 +1,13 @@
+experiment_name: experiment_test
+languages:
+  en:
+    language: en
+    path_to_conll_dataset: UD_English-GUM/en_gum-ud-train.conllu
+    models: []
+multilingual_models:
+- google-bert/bert-base-multilingual-cased
+- microsoft/mdeberta-v3-base
+# - mistralai/Mistral-7B-v0.1
+- meta-llama/Meta-Llama-3.1-8B
+# - google/gemma-2-9b
+# - bigscience/bloom-1b7

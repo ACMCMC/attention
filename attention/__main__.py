@@ -1,20 +1,29 @@
 # %%
 # Load the experiment config from "experiment_config.yaml"
-import yaml
+import argparse
 import logging
 import os
 from pathlib import Path
-from huggingface_hub import HfApi
 
 import mlflow
 import torch
 import transformers
+import yaml
+from huggingface_hub import HfApi
 
 from .dataset_eval import eval_ud
 
 logger = logging.getLogger(__name__)
 
-with open(Path(__file__).parent.parent / "experiment_config.yaml", "r") as f:
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--experiment_config_path",
+    default=Path(__file__).parent.parent / "experiment_config.yaml",
+    type=Path,
+)
+args = parser.parse_args()
+
+with open(args.experiment_config_path, "r") as f:
     experiment_config = yaml.safe_load(f)
 
 mlflow.set_experiment(experiment_config["experiment_name"])
@@ -52,7 +61,14 @@ for language, metadata in experiment_config["languages"].items():
                     try:
                         model_name = model_uri.split("/")[-1]
                         # If this model is not registered in MLFlow, register it
-                        if len(mlflow.search_registered_models(filter_string=f'name="{model_name}"')) == 0:
+                        if (
+                            len(
+                                mlflow.search_registered_models(
+                                    filter_string=f'name="{model_name}"'
+                                )
+                            )
+                            == 0
+                        ):
                             logger.info(f"Registering model {model_uri}...")
                             mlflow.register_model(
                                 model_uri=f"transformers://{model_uri}", name=model_name
@@ -60,8 +76,12 @@ for language, metadata in experiment_config["languages"].items():
 
                         mlflow.set_tag("model_uri", model_uri)
                         mlflow.log_param("metadata", metadata)
-                        mlflow.log_param("accept_bidirectional_relations", accept_bidirectional)
-                        mlflow.log_param("min_words_matching_relation", MIN_WORDS_MATCHING_RELATION)
+                        mlflow.log_param(
+                            "accept_bidirectional_relations", accept_bidirectional
+                        )
+                        mlflow.log_param(
+                            "min_words_matching_relation", MIN_WORDS_MATCHING_RELATION
+                        )
 
                         logger.info(f"Loading model {model_uri}...")
                         # Which one to use: AutoModelForMaskedLM or AutoModelForCausalLM?
@@ -78,9 +98,14 @@ for language, metadata in experiment_config["languages"].items():
                             model_uri, trust_remote_code=True
                         )
 
-                        output_dir = Path(__file__).parent.parent / f"results_{language}" / model_name
+                        output_dir = (
+                            Path(__file__).parent.parent
+                            / f"results_{language}"
+                            / model_name
+                        )
                         path_to_conll_dataset: Path = (
-                            Path(__file__).parent.parent / metadata["path_to_conll_dataset"]
+                            Path(__file__).parent.parent
+                            / metadata["path_to_conll_dataset"]
                         )
                         mlflow.set_tag("dataset", path_to_conll_dataset.parent.name)
 
