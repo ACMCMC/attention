@@ -369,7 +369,7 @@ def plot_relations(
 
 def calculate_uas(
     heads_matching_sentence: List[Dict[str, Any]],
-    conll_phrases: List[pd.DataFrame],
+    conll_phrases: List[List[Dict[str, Any]]],
 ) -> Dict[str, torch.Tensor]:
     """
     Calculate the Unlabeled Attachment Score (UAS) of the model on the dataset.
@@ -426,12 +426,13 @@ def calculate_uas(
     # Also, get the possible maximum for each dependency type. For this, use the gold standard (the CONLL-U file)
     print(f"number_of_heads_matching_sentence_per_dependency: {number_of_heads_matching_sentence_per_dependency}")
     total_relations_per_dependency_in_gold_standard = {
-        dependency: 0 for dependency in number_of_heads_matching_sentence_per_dependency
+        dependency: 0 for dependency in number_of_heads_matching_sentence_per_dependency.keys()
     }
     for conll in conll_phrases:
-        for dependency in total_relations_per_dependency_in_gold_standard:
+        # conll is a list of dictionaries, each representing a word
+        for dependency in total_relations_per_dependency_in_gold_standard.keys():
             total_relations_per_dependency_in_gold_standard[dependency] += len(
-                conll[conll["DEPREL"] == dependency]
+                [word for word in conll if word["DEPREL"] == dependency]
             )
 
     for dependency, matrix in number_of_heads_matching_sentence_per_dependency.items():

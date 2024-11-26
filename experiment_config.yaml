@@ -58,6 +58,6 @@ multilingual_models:
 - microsoft/mdeberta-v3-base
 - google-bert/bert-base-multilingual-cased
 # - mistralai/Mistral-7B-v0.1
-- meta-llama/Meta-Llama-3.1-8B
+# - meta-llama/Meta-Llama-3.1-8B
 # - google/gemma-2-9b
 - bigscience/bloom-1b7
