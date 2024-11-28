@@ -61,3 +61,6 @@ multilingual_models:
 # - meta-llama/Meta-Llama-3.1-8B
 # - google/gemma-2-9b
 - bigscience/bloom-1b7
+group_relations_by_family: true
+trim_dataset_size: 1000 # Minimum size across datasets: 1K (TreeGal)
+accept_bidirectional_relations: true

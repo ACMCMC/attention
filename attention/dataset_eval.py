@@ -26,8 +26,6 @@ logger = logging.getLogger(__file__)
 logger.setLevel(logging.DEBUG)
 
 
-
-
 def eval_glue(model, accept_bidirectional_relations):
     conll_dataset = datasets.load_dataset("glue", "cola", split="test")
     get_matching_heads_sentence = generate_fn_get_matching_heads_sentence(
@@ -38,29 +36,89 @@ def eval_glue(model, accept_bidirectional_relations):
     )
 
     # Plot the relations
-    plot_relations(heads_matching_sentence, model=model, display=False, accept_bidirectional_relations=accept_bidirectional_relations)
+    plot_relations(
+        heads_matching_sentence,
+        model=model,
+        display=False,
+        accept_bidirectional_relations=accept_bidirectional_relations,
+    )
 
 
 def get_all_possible_conll_phrases(path_to_conll_dataset: Path):
     # We get an input path which looks like this: '.../eu_bdt-ud-train.conllu'
     # We want to also try to load the corresponding test and dev datasets, and concatenate them to the training dataset
 
-    all_possible_conll_phrases = load_conllu_file(path_to_conll_dataset) # This is the original dataset
+    all_possible_conll_phrases = load_conllu_file(
+        path_to_conll_dataset
+    )  # This is the original dataset
     # Now, does a test dataset exist?
-    test_dataset_path = path_to_conll_dataset.parent / (path_to_conll_dataset.name.replace("train", "test"))
+    test_dataset_path = path_to_conll_dataset.parent / (
+        path_to_conll_dataset.name.replace("train", "test")
+    )
     if os.path.exists(test_dataset_path):
         all_possible_conll_phrases += load_conllu_file(test_dataset_path)
     else:
         logger.warning(f"Test dataset not found at {test_dataset_path}")
-    
+
     # Now, does a dev dataset exist?
-    dev_dataset_path = path_to_conll_dataset.parent / (path_to_conll_dataset.name.replace("train", "dev"))
+    dev_dataset_path = path_to_conll_dataset.parent / (
+        path_to_conll_dataset.name.replace("train", "dev")
+    )
     if os.path.exists(dev_dataset_path):
         all_possible_conll_phrases += load_conllu_file(dev_dataset_path)
     else:
         logger.warning(f"Dev dataset not found at {dev_dataset_path}")
 
     return all_possible_conll_phrases
+
+
+def perform_group_relations_by_family(
+    conll_phrases: List[List[Dict[str, Any]]]
+) -> List[List[Dict[str, Any]]]:
+    """
+    Group the relations by family. For example, 'nsubj', 'nsubjpass' and 'csubj' would be grouped together.
+    """
+
+    """
+    Classes de funções/dependências sintácticas
+        nominal verb arguments: obj, nsub, obl, iobj, (punct?)
+        noun modifiers: nmod, amod, appos, acl
+        noun specifiers: det, nummod, case
+        verb auxiliars: aux, cop, mark, advmod
+        clausal verb arguments: ccomp, xcomp, csubj
+        compounds: flat, fixed, compound
+        conjunctions: conj, cc
+    É possível fazer classes mais genéricas juntando as seguintes:
+        Verbal complements: 1+5
+        Auxiliars+Specifiers: 3+4
+    """
+
+    # Define the relation families
+    relation_families = {
+        "nominal_verb_arguments": ["obj", "nsubj", "obl", "iobj", "punct"],
+        "noun_modifiers": ["nmod", "amod", "appos", "acl"],
+        "noun_specifiers": ["det", "nummod", "case"],
+        "verb_auxiliars": ["aux", "cop", "mark", "advmod"],
+        "clausal_verb_arguments": ["ccomp", "xcomp", "csubj"],
+        "compounds": ["flat", "fixed", "compound"],
+        "conjunctions": ["conj", "cc"],
+    }
+
+    # First, map everything in the form XX:YY to XX
+    for conll in conll_phrases:
+        for word in conll:
+            word["DEPREL"] = word["DEPREL"].split(":")[0]
+
+    # Now, group the relations by family
+    for conll in conll_phrases:
+        for word in conll:
+            for family, relations in relation_families.items():
+                if word["DEPREL"] in relations:
+                    word["DEPREL"] = family
+
+    return conll_phrases
+
+
 def eval_ud(
     model,
     tokenizer,
@@ -68,14 +126,17 @@ def eval_ud(
     output_dir=Path(__file__).parent.parent / "results",
     trim_dataset_size=None,
     random_seed=42,
+    group_relations_by_family=False,
     **kwargs,
 ):
     logging.info(f"Running evaluation on {path_to_conll_dataset}...")
 
     # Check that the following arguments are defined: 'accept_bidirectional_relations', 'min_words_matching_relation'
-    if 'accept_bidirectional_relations' not in kwargs:
-        raise ValueError("The argument 'accept_bidirectional_relations' must be defined")
-    if 'min_words_matching_relation' not in kwargs:
+    if "accept_bidirectional_relations" not in kwargs:
+        raise ValueError(
+            "The argument 'accept_bidirectional_relations' must be defined"
+        )
+    if "min_words_matching_relation" not in kwargs:
         raise ValueError("The argument 'min_words_matching_relation' must be defined")
 
     # Set the random seed
@@ -88,8 +149,13 @@ def eval_ud(
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    conll_phrases: List[List[Dict[str, Any]]] = get_all_possible_conll_phrases(path_to_conll_dataset)
-    # TODO: Definir mapeado de familias
+    conll_phrases: List[List[Dict[str, Any]]] = get_all_possible_conll_phrases(
+        path_to_conll_dataset
+    )
+
+    if group_relations_by_family:
+        logger.info("Grouping relations by family...")
+        conll_phrases = perform_group_relations_by_family(conll_phrases)
 
     mlflow.log_param("original_dataset_size", len(conll_phrases))
     if trim_dataset_size:
@@ -99,8 +165,6 @@ def eval_ud(
         )
         conll_phrases = random.sample(conll_phrases, trim_dataset_size)
     mlflow.log_param("trimmed_dataset_size", len(conll_phrases))
-
-    conll_phrases = conll_phrases[:10]
 
     logger.info(f"About to process {len(conll_phrases)} examples...")
 
@@ -114,7 +178,11 @@ def eval_ud(
 
     # Plot the relations
     plot_relations(
-        heads_matching_sentence, model=model, display=False, output_dir=output_dir, **kwargs
+        heads_matching_sentence,
+        model=model,
+        display=False,
+        output_dir=output_dir,
+        **kwargs,
     )
 
     uas = calculate_uas(heads_matching_sentence, conll_phrases)
@@ -179,7 +247,7 @@ def generate_fn_get_matching_heads_sentence(
         heads_matching_rel = heads_matching_relation(
             conll_pd,
             max_weights,
-            accept_bidirectional_relations=kwargs['accept_bidirectional_relations'],
+            accept_bidirectional_relations=kwargs["accept_bidirectional_relations"],
         )
         # The result is a list of tuples (layer, head, head_word, dependent_word)
         # Only keep the tuples that have a dependent_word matching the relation
@@ -267,7 +335,7 @@ def plot_relations(
                 if model.config.is_decoder:
                     # For decoder-only models, the dependant has to be posterior to the head, otherwise the attention is not possible
                     if dependant_position < head_position and (
-                        not kwargs['accept_bidirectional_relations']
+                        not kwargs["accept_bidirectional_relations"]
                     ):
                         # We don't accept bidirectional relations, so it's impossible that we'll have an attention pattern DEPENDANT -> HEAD
                         logger.debug(
@@ -288,7 +356,7 @@ def plot_relations(
             ):
                 opacity_matrix[layer, head_position] += variability
             total_words += len(example["dependencies_reltype"])
-        if total_words_matching_relation < kwargs['min_words_matching_relation']:
+        if total_words_matching_relation < kwargs["min_words_matching_relation"]:
             continue
         # opacity_matrix /= total_words  # Get the average variability for each layer and head
         # Divide the opacity matrix by the maximum value to normalize it
@@ -425,7 +493,8 @@ def calculate_uas(
 
     # Also, get the possible maximum for each dependency type. For this, use the gold standard (the CONLL-U file)
     total_relations_per_dependency_in_gold_standard = {
-        dependency: 0 for dependency in number_of_heads_matching_sentence_per_dependency.keys()
+        dependency: 0
+        for dependency in number_of_heads_matching_sentence_per_dependency.keys()
     }
     for conll in conll_phrases:
         # conll is a list of dictionaries, each representing a word
