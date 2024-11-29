@@ -101,7 +101,7 @@ def perform_group_relations_by_family(
         "verb_auxiliars": ["aux", "cop", "mark", "advmod"],
         "clausal_verb_arguments": ["ccomp", "xcomp", "csubj"],
         "compounds": ["flat", "fixed", "compound"],
-        "conjunctions": ["conj", "cc"],
+        "conjunctions": ["conj", "cc", "advcl"],
     }
 
     # First, map everything in the form XX:YY to XX
