@@ -1,13 +1,11 @@
 # %%
 # Test file for max attention weights
 # Use pytest to run this file
-
-from attention.conll import parse_to_conllu
+import torch
+import pandas as pd
 
 
 def test_join_subwords():
-    import torch
-
     from attention.max_attention_weights import join_subwords
 
     words_to_tokenized_words = [
@@ -66,6 +64,140 @@ def test_join_subwords():
 
     max = join_subwords(attention_matrix, words_to_tokenized_words)
     assert torch.allclose(max, expected)
+
+
+def test_heads_matching_relation():
+    from attention.max_attention_weights import heads_matching_relation
+
+    conll = pd.DataFrame.from_records(
+        data=[
+            (
+                0,
+                "If",
+                "if",
+                "SCONJ",
+                "IN",
+                None,
+                2,
+                "verb_auxiliars",
+                list([("mark", 2)]),
+                1,
+            )(
+                1,
+                "you",
+                "you",
+                "PRON",
+                "PRP",
+                {"Case": "Nom", "Number": "Sing", "Person": "2", "PronType": "Prs"},
+                2,
+                "nominal_verb_arguments",
+                list([("nsubj", 2)]),
+                2,
+            )(
+                2,
+                "live",
+                "live",
+                "VERB",
+                "VBP",
+                {
+                    "Mood": "Ind",
+                    "Number": "Sing",
+                    "Person": "2",
+                    "Tense": "Pres",
+                    "VerbForm": "Fin",
+                },
+                12,
+                "advcl",
+                list([("advcl:if", 12)]),
+                3,
+            )(
+                3,
+                "in",
+                "in",
+                "ADP",
+                "IN",
+                None,
+                8,
+                "noun_specifiers",
+                list([("case", 8)]),
+                4,
+            )(
+                4,
+                "or",
+                "or",
+                "CCONJ",
+                "CC",
+                None,
+                5,
+                "conjunctions",
+                list([("cc", 5)]),
+                5,
+            )(
+                5,
+                "near",
+                "near",
+                "ADP",
+                "IN",
+                None,
+                3,
+                "conjunctions",
+                list([("conj:or", 3), ("case", 8)]),
+                6,
+            )(
+                6,
+                "a",
+                "a",
+                "DET",
+                "DT",
+                {"Definite": "Ind", "PronType": "Art"},
+                8,
+                "noun_specifiers",
+                list([("det", 8)]),
+                7,
+            )(
+                7,
+                "big",
+                "big",
+                "ADJ",
+                "JJ",
+                {"Degree": "Pos"},
+                8,
+                "noun_modifiers",
+                list([("amod", 8)]),
+                8,
+            )(
+                8,
+                "city",
+                "city",
+                "NOUN",
+                "NN",
+                {"Number": "Sing"},
+                2,
+                "nominal_verb_arguments",
+                list([("obl:in", 2)]),
+                9,
+            )(
+                9,
+                ".",
+                ".",
+                "PUNCT",
+                ".",
+                None,
+                2,
+                "nominal_verb_arguments",
+                list([("punct", 2)]),
+                10,
+            )
+        ]
+    )
+    indices_of_max_attention = torch.Tensor()
+    result = heads_matching_relation(
+        conll=conll,
+        indices_of_max_attention=indices_of_max_attention,
+        accept_bidirectional_relations=False,
+    )
+
+    assert result == []
 
 
 # %%

@@ -5,11 +5,7 @@ languages:
     path_to_conll_dataset: UD_English-GUM/en_gum-ud-train.conllu
     models: []
 multilingual_models:
-- google-bert/bert-base-multilingual-cased
-- microsoft/mdeberta-v3-base
-# - mistralai/Mistral-7B-v0.1
-# - google/gemma-2-9b
-# - bigscience/bloom-1b7
+- gpt2
 group_relations_by_family: true
 trim_dataset_size: 10 # Minimum size across datasets: 1K (TreeGal)
 accept_bidirectional_relations: true
