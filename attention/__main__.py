@@ -10,9 +10,13 @@ import torch
 import transformers
 import yaml
 from huggingface_hub import HfApi
+from dotenv import load_dotenv
 
 from .dataset_eval import eval_ud
 
+load_dotenv(Path(__file__).parent.parent / ".env")
+
+logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser()
@@ -20,6 +24,16 @@ parser.add_argument(
     "--experiment_config_path",
     default=Path(__file__).parent.parent / "experiment_config.yaml",
     type=Path,
+)
+parser.add_argument(
+    "--accept_bidirectional_relations",
+    action="store",
+    help="If True, we also consider a 'hit' the fact that HEAD attends to DEPENDANT",
+)
+parser.add_argument(
+    "--group_relations_by_family",
+    action="store",
+    help="If True, we group relations by family",
 )
 args = parser.parse_args()
 
@@ -31,7 +45,19 @@ mlflow.set_experiment(experiment_config["experiment_name"])
 trim_dataset_size = experiment_config.get("trim_dataset_size", None)
 
 # See the definitions of family groups in the function `group_relations_by_family` in `dataset_eval.py`
-group_relations_by_family = experiment_config.get("group_relations_by_family", False)
+# If this is passed as a CLI argument, use that instead of the one in the config file
+if args.group_relations_by_family is not None:
+    logger.info(
+        f"Group relations by family parameter passed as CLI argument: {args.group_relations_by_family}"
+    )
+    group_relations_by_family = args.group_relations_by_family
+else:
+    logger.info(
+        f"Group relations by family parameter from config file: {experiment_config.get('group_relations_by_family', False)}"
+    )
+    group_relations_by_family = experiment_config.get(
+        "group_relations_by_family", False
+    )
 
 # In decoder models, relations like this:
 # "I am human", where DEPENDANT=human and HEAD=am
@@ -43,14 +69,24 @@ group_relations_by_family = experiment_config.get("group_relations_by_family", F
 # i.e. to obserb the relation, the head needs to come before
 # If this parameter is enabled, we also consider a "hit" the fact that HEAD attends to DEPENDANT
 # This is in line with current literature.
-accept_bidirectional_relations = experiment_config.get(
-    "accept_bidirectional_relations", False
-)
+# If this is passed as a CLI argument, use that instead of the one in the config file
+if args.accept_bidirectional_relations is not None:
+    logger.info(
+        f"Accepting bidirectional relations parameter passed as CLI argument: {args.accept_bidirectional_relations}"
+    )
+    accept_bidirectional_relations = args.accept_bidirectional_relations
+else:
+    logger.info(
+        f"Accepting bidirectional relations parameter from config file: {experiment_config.get('accept_bidirectional_relations', False)}"
+    )
+    accept_bidirectional_relations = experiment_config.get(
+        "accept_bidirectional_relations", False
+    )
 
 api = HfApi()
 
 # Sometimes, there's very unfrequent relations, so if there's less than this number of relations present in the analyzed data, we don't output a diagram on that
-MIN_WORDS_MATCHING_RELATION = 25
+min_words_matching_relation = experiment_config.get("min_words_matching_relation", 1)
 
 
 for language, metadata in experiment_config["languages"].items():
@@ -88,7 +124,7 @@ for language, metadata in experiment_config["languages"].items():
                         "accept_bidirectional_relations", accept_bidirectional_relations
                     )
                     mlflow.log_param(
-                        "min_words_matching_relation", MIN_WORDS_MATCHING_RELATION
+                        "min_words_matching_relation", min_words_matching_relation
                     )
                     mlflow.log_param("trim_dataset_size", trim_dataset_size)
                     mlflow.log_param(
@@ -113,6 +149,7 @@ for language, metadata in experiment_config["languages"].items():
                     output_dir = (
                         Path(__file__).parent.parent
                         / f"results_{language}"
+                        / f"bidirectional_relations_{accept_bidirectional_relations}+group_relations_by_family_{group_relations_by_family}"
                         / model_name
                     )
                     path_to_conll_dataset: Path = (
@@ -126,14 +163,21 @@ for language, metadata in experiment_config["languages"].items():
                         path_to_conll_dataset=path_to_conll_dataset,
                         output_dir=output_dir,
                         accept_bidirectional_relations=accept_bidirectional_relations,
-                        min_words_matching_relation=MIN_WORDS_MATCHING_RELATION,
+                        min_words_matching_relation=min_words_matching_relation,
                         trim_dataset_size=trim_dataset_size,
                         group_relations_by_family=group_relations_by_family,
                         # trim_dataset_size=10,
                     )
 
+                    logger.info(f"CUDA memory usage before deleting model: reserved={torch.cuda.memory_reserved(0)}, allocated={torch.cuda.memory_allocated(0)}")
+                    loaded_model.cpu()
                     del loaded_model
                     del tokenizer
+
+                    import gc
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    logger.info(f"CUDA memory usage after deleting model: reserved={torch.cuda.memory_reserved(0)}, allocated={torch.cuda.memory_allocated(0)}")
                 except Exception as e:
                     logger.error(f"Error while evaluating {model_uri}: {e}")
                     mlflow.log_param("error", str(e))

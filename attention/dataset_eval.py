@@ -120,8 +120,8 @@ def perform_group_relations_by_family(
 
 
 def eval_ud(
-    model,
-    tokenizer,
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizer,
     path_to_conll_dataset: Path,
     output_dir=Path(__file__).parent.parent / "results",
     trim_dataset_size=None,
@@ -176,12 +176,21 @@ def eval_ud(
     phrases_iterator = tqdm.tqdm(conll_phrases, unit="phrase")
     heads_matching_sentence = [get_matching_heads_sentence(e) for e in phrases_iterator]
 
+    variability_matrix = get_variability_matrix(
+        model=model,
+        heads_matching_sentence=heads_matching_sentence,
+    )
+
+    # Normalize the variability matrix by the maximum value
+    variability_matrix_normalized = variability_matrix / variability_matrix.max()
+
     # Plot the relations
     plot_relations(
         heads_matching_sentence,
         model=model,
         display=False,
         output_dir=output_dir,
+        variability_matrix_normalized=variability_matrix_normalized,
         **kwargs,
     )
 
@@ -202,8 +211,49 @@ def eval_ud(
     # mlflow.log_table("uas", uas_df)
     mlflow.log_artifact(output_dir / "uas_scores" / f"uas_{relation}.csv")
 
+    # Also store the variability as a CSV
+    variability_df = pd.DataFrame(variability_matrix_normalized)
+    num_layers = model.config.num_hidden_layers
+    num_heads = model.config.num_attention_heads
+    # Index column: layer
+    variability_df.index = [f"layer_{i}" for i in range(num_layers)]
+    # Set the column names to the 'head_'+head number
+    variability_df.columns = [f"head_{i}" for i in range(num_heads)]
+    variability_df.to_csv(
+        output_dir
+        / "variability"
+        / f"variability_{relation}_{model.config.model_type}.csv",
+        index=True,
+    )
 
-# %%
+    mlflow.log_artifact(
+        output_dir
+        / "variability"
+        / f"variability_{relation}_{model.config.model_type}.csv"
+    )
+
+
+def get_variability_matrix(
+    model: PreTrainedModel,
+    heads_matching_sentence: List[Dict[str, Any]],
+):
+    """
+    Get the variability matrix for the model.
+    The variability matrix is a matrix of size [num_layers, num_heads] with the variability of each head for each layer.
+    """
+    num_layers = model.config.num_hidden_layers
+    num_heads = model.config.num_attention_heads
+    variability_matrix = torch.zeros((num_layers, num_heads))
+    for example in heads_matching_sentence:
+        for (layer, head_position), variability in zip(
+            example["matching_heads_layer_and_head"],
+            example["matching_heads_variability"],
+        ):
+            variability_matrix[layer, head_position] += variability
+
+    return variability_matrix
+
+
 def generate_fn_get_matching_heads_sentence(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizer,
@@ -289,6 +339,7 @@ def plot_relations(
     model: PreTrainedModel,
     display=True,
     output_dir=(Path(__file__).parent.parent / "results"),
+    variability_matrix_normalized: torch.Tensor = None,
     **kwargs,
 ):
     # Get all unique values for the relation
@@ -350,17 +401,13 @@ def plot_relations(
                         )
                 if dependency == relation:
                     total_words_matching_relation += 1
-            for (layer, head_position), variability in zip(
-                example["matching_heads_layer_and_head"],
-                example["matching_heads_variability"],
-            ):
-                opacity_matrix[layer, head_position] += variability
             total_words += len(example["dependencies_reltype"])
         if total_words_matching_relation < kwargs["min_words_matching_relation"]:
             continue
-        # opacity_matrix /= total_words  # Get the average variability for each layer and head
-        # Divide the opacity matrix by the maximum value to normalize it
-        opacity_matrix /= opacity_matrix.max()
+
+        if variability_matrix_normalized is None:
+            # Generate a matrix of zeros
+            variability_matrix_normalized = torch.zeros((num_layers, num_heads))
 
         # Plot the matrix. The upper limit of the colorbar is the number of words in the dataset
         # Title: relation
@@ -375,7 +422,7 @@ def plot_relations(
             vmin=0,
             vmax=total_words_matching_relation,
             annot=True,
-            alpha=1.0 - opacity_matrix,
+            alpha=1.0 - variability_matrix_normalized,
             # Text size: 6
             annot_kws={"size": 6},
             # Do not use scientific notation
@@ -396,7 +443,8 @@ def plot_relations(
 
         # If the directory does not exist, create it
         os.makedirs(output_dir / "figures", exist_ok=True)
-        os.makedirs(output_dir / "csv", exist_ok=True)
+        os.makedirs(output_dir / "number_of_heads_matching", exist_ok=True)
+        os.makedirs(output_dir / "variability", exist_ok=True)
 
         # Store it as a PDF
         plt.savefig(
@@ -423,14 +471,14 @@ def plot_relations(
         matrix_df.columns = [f"head_{i}" for i in range(num_heads)]
         matrix_df.to_csv(
             output_dir
-            / "csv"
+            / "number_of_heads_matching"
             / f"heads_matching_{relation}_{model.config.model_type}.csv",
             index=True,
         )
 
         mlflow.log_artifact(
             output_dir
-            / "csv"
+            / "number_of_heads_matching"
             / f"heads_matching_{relation}_{model.config.model_type}.csv"
         )
 

@@ -3,3 +3,6 @@ __pycache__
 #UD_*
 attention.egg-info
 mlruns/
+.conda/
+run_*
+.env
