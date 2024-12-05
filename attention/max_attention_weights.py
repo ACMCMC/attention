@@ -27,7 +27,7 @@ def max_attention_weights(attention_matrix):
 
 
 def heads_matching_relation(
-    conll, indices_of_max_attention, accept_bidirectional_relations=False
+    conll: pd.DataFrame, attention_matrix: torch.Tensor, accept_bidirectional_relations=False
 ):
     """
     Returns the heads matching relation between words in the phrase. There is a relation if conll row['HEAD'] == row['ID'].
@@ -41,6 +41,8 @@ def heads_matching_relation(
         list: List of tuples with the relation between words in the phrase. Each tuple is (layer, head, head_word, dependent_word)
     """
     heads_matching_relations = []
+    
+    indices_of_max_attention = max_attention_weights(attention_matrix)
 
     def process_one_row(head_index, dependant_index):
         # Go through all the words in the phrase to find the heads matching relation

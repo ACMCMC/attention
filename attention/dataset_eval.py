@@ -15,10 +15,8 @@ import tqdm
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from attention.conll import load_conllu_file, parse_to_conllu
-from attention.max_attention_weights import (
-    heads_matching_relation,
-    max_attention_weights,
-)
+from attention.max_attention_weights import (heads_matching_relation,
+                                             max_attention_weights)
 from attention.model_process import get_attention_matrix
 from attention.variability import get_relative_variability
 
@@ -293,10 +291,9 @@ def generate_fn_get_matching_heads_sentence(
         attention_matrix = get_attention_matrix(
             conll_pd=conll_pd, model=model, tokenizer=tokenizer
         )
-        max_weights = max_attention_weights(attention_matrix)
         heads_matching_rel = heads_matching_relation(
             conll_pd,
-            max_weights,
+            attention_matrix=attention_matrix,
             accept_bidirectional_relations=kwargs["accept_bidirectional_relations"],
         )
         # The result is a list of tuples (layer, head, head_word, dependent_word)
@@ -327,7 +324,8 @@ def generate_fn_get_matching_heads_sentence(
             "dependencies_head_and_dependant": dependencies_head_and_dependant,
             "dependencies_reltype": dependencies_reltype,
             "forms": conll_pd["FORM"],
-            "max_attention_weights": max_weights,
+            "attention_matrix": attention_matrix,
+            "max_attention_weights": max_attention_weights(attention_matrix),
         }
 
     return get_matching_heads_sentence

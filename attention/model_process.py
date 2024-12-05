@@ -9,7 +9,6 @@ from attention.conll import parse_to_conllu
 # %%
 from attention.max_attention_weights import (
     heads_matching_relation,
-    max_attention_weights,
 )
 
 
@@ -85,7 +84,6 @@ if __name__ == "__main__":
         tokens=words,
     )
 
-    max_weights = max_attention_weights(original_words_stacked_attention_matrix)
-    heads_matching_rel = heads_matching_relation(conll_pd, max_weights)
+    heads_matching_rel = heads_matching_relation(conll_pd, attention_matrix=original_words_stacked_attention_matrix)
     print(heads_matching_rel)
 # %%
