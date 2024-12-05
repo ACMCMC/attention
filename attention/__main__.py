@@ -27,12 +27,12 @@ parser.add_argument(
 )
 parser.add_argument(
     "--accept_bidirectional_relations",
-    action="store",
+    action="store_true",
     help="If True, we also consider a 'hit' the fact that HEAD attends to DEPENDANT",
 )
 parser.add_argument(
     "--group_relations_by_family",
-    action="store",
+    action="store_true",
     help="If True, we group relations by family",
 )
 args = parser.parse_args()

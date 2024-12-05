@@ -99,7 +99,7 @@ def perform_group_relations_by_family(
         "verb_auxiliars": ["aux", "cop", "mark", "advmod"],
         "clausal_verb_arguments": ["ccomp", "xcomp", "csubj"],
         "compounds": ["flat", "fixed", "compound"],
-        "conjunctions": ["conj", "cc"],
+        "conjunctions": ["conj", "cc", "advcl"],
     }
 
     # First, map everything in the form XX:YY to XX
@@ -124,7 +124,6 @@ def eval_ud(
     output_dir=Path(__file__).parent.parent / "results",
     trim_dataset_size=None,
     random_seed=42,
-    group_relations_by_family=False,
     **kwargs,
 ):
     logging.info(f"Running evaluation on {path_to_conll_dataset}...")
@@ -151,9 +150,20 @@ def eval_ud(
         path_to_conll_dataset
     )
 
-    if group_relations_by_family:
-        logger.info("Grouping relations by family...")
+    if kwargs['group_relations_by_family'] == True:
+        logger.info(f"Grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
         conll_phrases = perform_group_relations_by_family(conll_phrases)
+    elif kwargs['group_relations_by_family'] == False:
+        logger.info(f"Not grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
+    else:
+        raise ValueError("The argument 'group_relations_by_family' must be defined")
+
+    if kwargs['accept_bidirectional_relations'] == True:
+        logger.info(f"Accepting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
+    elif kwargs['accept_bidirectional_relations'] == False:
+        logger.info(f"Rejecting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
+    else:
+        raise ValueError("The argument 'accept_bidirectional_relations' must be defined")
 
     mlflow.log_param("original_dataset_size", len(conll_phrases))
     if trim_dataset_size:

@@ -6,6 +6,7 @@ languages:
     models: []
 multilingual_models:
 - gpt2
-group_relations_by_family: true
+min_words_matching_relation: 20
 trim_dataset_size: 10 # Minimum size across datasets: 1K (TreeGal)
-accept_bidirectional_relations: true
+# group_relations_by_family: true
+# accept_bidirectional_relations: true
