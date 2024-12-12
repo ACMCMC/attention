@@ -136,6 +136,19 @@ for language, metadata in experiment_config["languages"].items():
                     # We can use the HFApi to get the model's metadata and if it's a decoder model, we use AutoModelForMaskedLM, otherwise, AutoModelForCausalLM
                     # model_metadata = api.model_info(model_uri)
 
+                    output_dir = (
+                        Path(__file__).parent.parent
+                        / f"results_{language}"
+                        / f"bidirectional_relations_{accept_bidirectional_relations}+group_relations_by_family_{group_relations_by_family}"
+                        / model_name
+                    )
+                    # If the output directory exists and is not empty, skip this model
+                    if output_dir.exists() and len(list(output_dir.iterdir())) > 0:
+                        logger.info(
+                            f"Output directory {output_dir} already exists and is not empty. Skipping..."
+                        )
+                        continue
+
                     # For now, we'll just use AutoModel - this will work for both encoder and decoder models
                     loaded_model = transformers.AutoModel.from_pretrained(
                         model_uri, trust_remote_code=True
@@ -146,12 +159,6 @@ for language, metadata in experiment_config["languages"].items():
                         model_uri, trust_remote_code=True
                     )
 
-                    output_dir = (
-                        Path(__file__).parent.parent
-                        / f"results_{language}"
-                        / f"bidirectional_relations_{accept_bidirectional_relations}+group_relations_by_family_{group_relations_by_family}"
-                        / model_name
-                    )
                     path_to_conll_dataset: Path = (
                         Path(__file__).parent.parent / metadata["path_to_conll_dataset"]
                     )
@@ -169,15 +176,20 @@ for language, metadata in experiment_config["languages"].items():
                         # trim_dataset_size=10,
                     )
 
-                    logger.info(f"CUDA memory usage before deleting model: reserved={torch.cuda.memory_reserved(0)}, allocated={torch.cuda.memory_allocated(0)}")
+                    logger.info(
+                        f"CUDA memory usage before deleting model: reserved={torch.cuda.memory_reserved(0)}, allocated={torch.cuda.memory_allocated(0)}"
+                    )
                     loaded_model.cpu()
                     del loaded_model
                     del tokenizer
 
                     import gc
+
                     gc.collect()
                     torch.cuda.empty_cache()
-                    logger.info(f"CUDA memory usage after deleting model: reserved={torch.cuda.memory_reserved(0)}, allocated={torch.cuda.memory_allocated(0)}")
+                    logger.info(
+                        f"CUDA memory usage after deleting model: reserved={torch.cuda.memory_reserved(0)}, allocated={torch.cuda.memory_allocated(0)}"
+                    )
                 except Exception as e:
                     logger.error(f"Error while evaluating {model_uri}: {e}")
                     mlflow.log_param("error", str(e))

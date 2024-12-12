@@ -1,7 +1,7 @@
 bertviz==1.4.0
 conllu==4.5.3
 datasets==2.14.5
-huggingface-hub==0.17.3
+huggingface-hub==0.26.5
 matplotlib==3.8.2
 mlflow==2.18.0
 numpy==1.26.0
@@ -10,8 +10,8 @@ seaborn==0.13.2
 sentencepiece==0.1.99
 spacy==3.6.1
 spacy-conll==3.4.0
-tokenizers==0.13.3
+tokenizers==0.21.0
 torch==2.1.2
-transformers==4.33.3
+transformers==4.47.0
 pytest==8.0.0
 python-dotenv==1.0.1
