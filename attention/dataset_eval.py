@@ -301,6 +301,12 @@ def generate_fn_get_matching_heads_sentence(
         attention_matrix = get_attention_matrix(
             conll_pd=conll_pd, model=model, tokenizer=tokenizer
         )
+        if kwargs["remove_self_attention"]:
+            # Remove the self-attention from the attention matrix
+            attention_matrix = attention_matrix.masked_fill(
+                torch.eye(attention_matrix.shape[-1], dtype=bool), 0
+            )
+        
         heads_matching_rel = heads_matching_relation(
             conll_pd,
             attention_matrix=attention_matrix,

@@ -6,3 +6,4 @@ mlruns/
 .conda/
 run_*
 .env
+test/

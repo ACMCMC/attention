@@ -35,6 +35,11 @@ parser.add_argument(
     action="store_true",
     help="If True, we group relations by family",
 )
+parser.add_argument(
+    "--remove_self_attention",
+    action="store_true",
+    help="If True, we remove self-attention from the attention matrix by setting the diagonal to 0",
+)
 args = parser.parse_args()
 
 with open(args.experiment_config_path, "r") as f:
@@ -130,6 +135,7 @@ for language, metadata in experiment_config["languages"].items():
                     mlflow.log_param(
                         "group_relations_by_family", group_relations_by_family
                     )
+                    mlflow.log_param("remove_self_attention", args.remove_self_attention)
 
                     logger.info(f"Loading model {model_uri}...")
                     # Which one to use: AutoModelForMaskedLM or AutoModelForCausalLM?
@@ -139,7 +145,7 @@ for language, metadata in experiment_config["languages"].items():
                     output_dir = (
                         Path(__file__).parent.parent
                         / f"results_{language}"
-                        / f"bidirectional_relations_{accept_bidirectional_relations}+group_relations_by_family_{group_relations_by_family}"
+                        / f"bidirectional_relations_{accept_bidirectional_relations}+group_relations_by_family_{group_relations_by_family}+remove_self_attention_{args.remove_self_attention}"
                         / model_name
                     )
                     # If the output directory exists and is not empty, skip this model
@@ -173,6 +179,7 @@ for language, metadata in experiment_config["languages"].items():
                         min_words_matching_relation=min_words_matching_relation,
                         trim_dataset_size=trim_dataset_size,
                         group_relations_by_family=group_relations_by_family,
+                        remove_self_attention=args.remove_self_attention,
                         # trim_dataset_size=10,
                     )
 
