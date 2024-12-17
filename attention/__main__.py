@@ -40,6 +40,12 @@ parser.add_argument(
     action="store_true",
     help="If True, we remove self-attention from the attention matrix by setting the diagonal to 0",
 )
+parser.add_argument(
+    # An argument that lets the user specify a list of languages to evaluate. If the user specifies this argument, only the languages in this list will be evaluated. Otherwise, all languages will be evaluated.
+    "--languages",
+    nargs="+",
+    help="List of languages to evaluate",
+)
 args = parser.parse_args()
 
 with open(args.experiment_config_path, "r") as f:
@@ -95,6 +101,21 @@ min_words_matching_relation = experiment_config.get("min_words_matching_relation
 
 
 for language, metadata in experiment_config["languages"].items():
+    # If the list of languages to evaluate is passed as a CLI argument, only evaluate those languages
+    if args.languages is not None and language not in args.languages:
+        logger.warning(
+            f"Skipping evaluation for {language} because it's not in the list of languages passed as a CLI argument"
+        )
+        continue
+    elif args.languages is not None and language in args.languages:
+        logger.info(
+            f"Evaluating {language} because it's in the list of languages passed as a CLI argument"
+        )
+    elif args.languages is None:
+        logger.info(
+            f"Evaluating {language} because no list of languages was passed as a CLI argument"
+        )
+
     with mlflow.start_run(run_name=language) as mlrun:
         logger.info(f"Running evaluation for {language}...")
         models_to_evaluate = metadata["models"] + experiment_config.get(
@@ -135,7 +156,9 @@ for language, metadata in experiment_config["languages"].items():
                     mlflow.log_param(
                         "group_relations_by_family", group_relations_by_family
                     )
-                    mlflow.log_param("remove_self_attention", args.remove_self_attention)
+                    mlflow.log_param(
+                        "remove_self_attention", args.remove_self_attention
+                    )
 
                     logger.info(f"Loading model {model_uri}...")
                     # Which one to use: AutoModelForMaskedLM or AutoModelForCausalLM?
