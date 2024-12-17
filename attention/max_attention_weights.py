@@ -5,7 +5,7 @@ We assign a relation between word wi and wj if j = argmax W[i] for each row (tha
 """
 
 import pandas as pd
-# %%
+from typing import List, Tuple
 import torch
 
 
@@ -79,7 +79,7 @@ def heads_matching_relation(
 
 
 # %%
-def join_subwords(attention_matrix: torch.Tensor, words_to_tokenized_words: list):
+def join_subwords(attention_matrix: torch.Tensor, words_to_tokenized_words: List[Tuple[str, List[str]]]):
     """
     Joins the attention matrix of subwords into a matrix of words
 

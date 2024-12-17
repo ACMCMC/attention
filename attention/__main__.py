@@ -4,13 +4,16 @@ import argparse
 import logging
 import os
 from pathlib import Path
+from typing import Any, Dict, List
 
 import mlflow
 import torch
 import transformers
 import yaml
-from huggingface_hub import HfApi
 from dotenv import load_dotenv
+from huggingface_hub import HfApi
+
+from attention.conll import get_all_possible_conll_phrases
 
 from .dataset_eval import eval_ud
 
@@ -101,6 +104,16 @@ for language, metadata in experiment_config["languages"].items():
             "multilingual_models", []
         )
 
+
+        path_to_conll_dataset: Path = (
+            Path(__file__).parent.parent / metadata["path_to_conll_dataset"]
+        )
+        mlflow.set_tag("dataset", path_to_conll_dataset.parent.name)
+
+        conll_phrases: List[List[Dict[str, Any]]] = get_all_possible_conll_phrases(
+            path_to_conll_dataset
+        )
+
         for model_uri in models_to_evaluate:
             with mlflow.start_run(
                 run_name=f"{language}_{model_uri}",
@@ -135,7 +148,9 @@ for language, metadata in experiment_config["languages"].items():
                     mlflow.log_param(
                         "group_relations_by_family", group_relations_by_family
                     )
-                    mlflow.log_param("remove_self_attention", args.remove_self_attention)
+                    mlflow.log_param(
+                        "remove_self_attention", args.remove_self_attention
+                    )
 
                     logger.info(f"Loading model {model_uri}...")
                     # Which one to use: AutoModelForMaskedLM or AutoModelForCausalLM?
@@ -165,21 +180,16 @@ for language, metadata in experiment_config["languages"].items():
                         model_uri, trust_remote_code=True
                     )
 
-                    path_to_conll_dataset: Path = (
-                        Path(__file__).parent.parent / metadata["path_to_conll_dataset"]
-                    )
-                    mlflow.set_tag("dataset", path_to_conll_dataset.parent.name)
-
                     eval_ud(
                         model=loaded_model,
                         tokenizer=tokenizer,
-                        path_to_conll_dataset=path_to_conll_dataset,
                         output_dir=output_dir,
                         accept_bidirectional_relations=accept_bidirectional_relations,
                         min_words_matching_relation=min_words_matching_relation,
                         trim_dataset_size=trim_dataset_size,
                         group_relations_by_family=group_relations_by_family,
                         remove_self_attention=args.remove_self_attention,
+                        conll_phrases=conll_phrases,
                         # trim_dataset_size=10,
                     )
 

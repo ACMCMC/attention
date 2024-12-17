@@ -3,6 +3,7 @@
 import torch
 import transformers
 from transformers import PreTrainedModel, PreTrainedTokenizer
+import re
 
 from attention.conll import parse_to_conllu
 
@@ -12,7 +13,9 @@ from attention.max_attention_weights import (
 )
 
 
-def get_attention_matrix(conll_pd, model: PreTrainedModel, tokenizer: PreTrainedTokenizer):
+def get_attention_matrix(
+    conll_pd, model: PreTrainedModel, tokenizer: PreTrainedTokenizer
+):
     """
     Get the attention matrix for a given phrase
 
@@ -24,22 +27,27 @@ def get_attention_matrix(conll_pd, model: PreTrainedModel, tokenizer: PreTrained
         torch.Tensor: Attention matrix for the phrase. Shape: [batch_size, num_layers, num_heads, sequence_length, sequence_length]
     """
     words = conll_pd["FORM"].tolist()
+    # Join the words into a single string, but keep the words separated by spaces (beware: commas, periods, etc. would get an extra space)
+    sentence = " ".join(words)
+    # We need to take care of that extra space that would be added between punctuation and the previous word
+    sentence = re.sub(r"(\w)\s([^\w\s])", r"\1\2", sentence)
+
     # Get the tokenizer from the model
-    tokenized_words = tokenizer(words)["input_ids"]
-    words_to_tokenized_words = list(zip(words, tokenized_words))
-    # Concatenate the list of lists into a single tensor
-    input_ids = torch.concat(
-        [torch.tensor(x) for x in tokenized_words], dim=0
-    ).unsqueeze(0)
-    input_ids_str = tokenizer.convert_ids_to_tokens(input_ids[0])
-    # print(input_ids)
+    encodings = tokenizer(
+        sentence,
+        return_offsets_mapping=True,
+        return_tensors="pt",
+        return_attention_mask=False,
+    )
+
+    # Squeeze the batch dimension
+    encodings = {key: value.squeeze(0) for key, value in encodings.items()}
 
     # Get the attention values from the model
     model.eval()
     with torch.no_grad():
-        # If the model is on the GPU, move the input to the GPU
-        if model.device.type == "cuda":
-            input_ids = input_ids.cuda()
+        # Move to the same device as the model
+        input_ids = encodings["input_ids"].to(model.device)
         outputs = model(input_ids=input_ids, output_attentions=True)
 
     # Returns a tuple with the attention tensors, one for each layer
@@ -47,6 +55,41 @@ def get_attention_matrix(conll_pd, model: PreTrainedModel, tokenizer: PreTrained
     # Join them in a single tensor, of size [batch_size, num_layers, num_heads, sequence_length, sequence_length]
     unstacked_attentions = outputs["attentions"]
     stacked_attentions = torch.stack(unstacked_attentions, dim=1)
+
+    input_ids_as_string_tokens = tokenizer.convert_ids_to_tokens(
+        encodings["input_ids"]
+    )
+
+    # This is a list of words and their corresponding tokenized words
+    words_to_tokenized_words = []
+    current_word_index = 0
+    position_in_current_word = 0
+    current_word_tokens = []
+    for token, (start, end) in zip(input_ids_as_string_tokens, encodings["offset_mapping"]):
+        # We'll add the lenghts of the tokens until we have a length that is equal to the length of the word
+        # Let's imagine we have "you"
+        # And it's tokenized into "Ġyo", "u"
+        # We'll find the first shared character, "y", and add 1 to the position_in_current_word
+        # Then we'll find the second shared character, "o", and add 1 to the position_in_current_word
+        # ... and so on
+        current_word_tokens.append(token)
+        for i, character in enumerate(token):
+            if character == words[current_word_index][position_in_current_word]:
+                position_in_current_word += 1
+                if position_in_current_word > len(words[current_word_index]):
+                    raise ValueError(
+                        "The tokenized words are longer than the original words"
+                    )
+                if position_in_current_word == len(words[current_word_index]):
+                    # We have reached the end of the word
+                    words_to_tokenized_words.append(
+                        (words[current_word_index], current_word_tokens)
+                    )
+                    current_word_index += 1
+                    position_in_current_word = 0
+                    current_word_tokens = []
+
+        assert current_word_index <= len(words)
 
     from attention.max_attention_weights import join_subwords
 
@@ -84,6 +127,8 @@ if __name__ == "__main__":
         tokens=words,
     )
 
-    heads_matching_rel = heads_matching_relation(conll_pd, attention_matrix=original_words_stacked_attention_matrix)
+    heads_matching_rel = heads_matching_relation(
+        conll_pd, attention_matrix=original_words_stacked_attention_matrix
+    )
     print(heads_matching_rel)
 # %%

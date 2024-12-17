@@ -3,7 +3,9 @@
 Parse a phrase into a CoNLL-U format.
 """
 import logging
+import os
 from collections.abc import Iterable
+from pathlib import Path
 
 import pandas as pd
 import spacy
@@ -137,6 +139,34 @@ def load_conllu_file(filename):
         for p in sentences_dicts
     ]
     return sentences_dicts
+
+
+def get_all_possible_conll_phrases(path_to_conll_dataset: Path):
+    # We get an input path which looks like this: '.../eu_bdt-ud-train.conllu'
+    # We want to also try to load the corresponding test and dev datasets, and concatenate them to the training dataset
+
+    all_possible_conll_phrases = load_conllu_file(
+        path_to_conll_dataset
+    )  # This is the original dataset
+    # Now, does a test dataset exist?
+    test_dataset_path = path_to_conll_dataset.parent / (
+        path_to_conll_dataset.name.replace("train", "test")
+    )
+    if os.path.exists(test_dataset_path):
+        all_possible_conll_phrases += load_conllu_file(test_dataset_path)
+    else:
+        logger.warning(f"Test dataset not found at {test_dataset_path}")
+
+    # Now, does a dev dataset exist?
+    dev_dataset_path = path_to_conll_dataset.parent / (
+        path_to_conll_dataset.name.replace("train", "dev")
+    )
+    if os.path.exists(dev_dataset_path):
+        all_possible_conll_phrases += load_conllu_file(dev_dataset_path)
+    else:
+        logger.warning(f"Dev dataset not found at {dev_dataset_path}")
+
+    return all_possible_conll_phrases
 
 
 # %%
