@@ -42,34 +42,6 @@ def eval_glue(model, accept_bidirectional_relations):
     )
 
 
-def get_all_possible_conll_phrases(path_to_conll_dataset: Path):
-    # We get an input path which looks like this: '.../eu_bdt-ud-train.conllu'
-    # We want to also try to load the corresponding test and dev datasets, and concatenate them to the training dataset
-
-    all_possible_conll_phrases = load_conllu_file(
-        path_to_conll_dataset
-    )  # This is the original dataset
-    # Now, does a test dataset exist?
-    test_dataset_path = path_to_conll_dataset.parent / (
-        path_to_conll_dataset.name.replace("train", "test")
-    )
-    if os.path.exists(test_dataset_path):
-        all_possible_conll_phrases += load_conllu_file(test_dataset_path)
-    else:
-        logger.warning(f"Test dataset not found at {test_dataset_path}")
-
-    # Now, does a dev dataset exist?
-    dev_dataset_path = path_to_conll_dataset.parent / (
-        path_to_conll_dataset.name.replace("train", "dev")
-    )
-    if os.path.exists(dev_dataset_path):
-        all_possible_conll_phrases += load_conllu_file(dev_dataset_path)
-    else:
-        logger.warning(f"Dev dataset not found at {dev_dataset_path}")
-
-    return all_possible_conll_phrases
-
-
 def perform_group_relations_by_family(
     conll_phrases: List[List[Dict[str, Any]]]
 ) -> List[List[Dict[str, Any]]]:
@@ -120,14 +92,12 @@ def perform_group_relations_by_family(
 def eval_ud(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizer,
-    path_to_conll_dataset: Path,
+    conll_phrases: List[List[Dict[str, Any]]],
     output_dir=Path(__file__).parent.parent / "results",
     trim_dataset_size=None,
     random_seed=42,
     **kwargs,
 ):
-    logging.info(f"Running evaluation on {path_to_conll_dataset}...")
-
     # Check that the following arguments are defined: 'accept_bidirectional_relations', 'min_words_matching_relation'
     if "accept_bidirectional_relations" not in kwargs:
         raise ValueError(
@@ -135,6 +105,10 @@ def eval_ud(
         )
     if "min_words_matching_relation" not in kwargs:
         raise ValueError("The argument 'min_words_matching_relation' must be defined")
+    if "group_relations_by_family" not in kwargs:
+        raise ValueError("The argument 'group_relations_by_family' must be defined")
+    if "remove_self_attention" not in kwargs:
+        raise ValueError("The argument 'remove_self_attention' must be defined")
 
     # Set the random seed
     torch.manual_seed(random_seed)
@@ -145,10 +119,6 @@ def eval_ud(
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
-
-    conll_phrases: List[List[Dict[str, Any]]] = get_all_possible_conll_phrases(
-        path_to_conll_dataset
-    )
 
     if kwargs['group_relations_by_family'] == True:
         logger.info(f"Grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
