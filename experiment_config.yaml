@@ -54,15 +54,16 @@ languages:
     - marcosgg/bert-base-gl-cased
     - proxectonos/Carballo-bloom-1.3B
 multilingual_models:
-- bigscience/bloom-1b7
-- mistralai/Mistral-7B-v0.3
-- google/gemma-2-9b
-- meta-llama/Llama-3.2-3B
-- openai-community/gpt2
-- EleutherAI/gpt-j-6b
+# These models are run on all the models above - it does not necessarily mean that they are multilingual
 - microsoft/deberta-v3-base
 - microsoft/mdeberta-v3-base
 - google-bert/bert-base-uncased
+- openai-community/gpt2
+- bigscience/bloom-1b7
+- meta-llama/Llama-3.1-3B
+- EleutherAI/gpt-j-6b
+- mistralai/Mistral-7B-v0.3
+- google/gemma-2-9b
 trim_dataset_size: 1000 # Minimum size across datasets: 1K (TreeGal)
 min_words_matching_relation: 20
 # group_relations_by_family: true # Will be passed as a CLI argument
