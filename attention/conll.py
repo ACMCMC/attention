@@ -108,7 +108,7 @@ def load_conllu_file(filename):
             if old_id == 0:
                 # The root word has HEAD = 0. This means that there is no head word.
                 return -1
-            logger.error(
+            logger.debug(
                 f"Could not find the word with OLD_ID={old_id} in the sentence {sentence}"
             )
             return None

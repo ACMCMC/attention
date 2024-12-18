@@ -7,6 +7,8 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List
 
+from attention.model_process import UnprocessableSentenceException
+
 import datasets
 import mlflow
 import pandas as pd
@@ -20,8 +22,7 @@ from attention.max_attention_weights import (heads_matching_relation,
 from attention.model_process import get_attention_matrix
 from attention.variability import get_relative_variability
 
-logger = logging.getLogger(__file__)
-logger.setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 def eval_glue(model, accept_bidirectional_relations):
@@ -121,30 +122,30 @@ def eval_ud(
     os.makedirs(output_dir, exist_ok=True)
 
     if kwargs['group_relations_by_family'] == True:
-        logger.info(f"Grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
+        logging.info(f"Grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
         conll_phrases = perform_group_relations_by_family(conll_phrases)
     elif kwargs['group_relations_by_family'] == False:
-        logger.info(f"Not grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
+        logging.info(f"Not grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
     else:
         raise ValueError("The argument 'group_relations_by_family' must be defined")
 
     if kwargs['accept_bidirectional_relations'] == True:
-        logger.info(f"Accepting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
+        logging.info(f"Accepting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
     elif kwargs['accept_bidirectional_relations'] == False:
-        logger.info(f"Rejecting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
+        logging.info(f"Rejecting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
     else:
         raise ValueError("The argument 'accept_bidirectional_relations' must be defined")
 
     mlflow.log_param("original_dataset_size", len(conll_phrases))
     if trim_dataset_size:
         # Randomly select a subset of the dataset. Choose it randomly to avoid bias
-        logger.info(
+        logging.info(
             f"Trimming dataset from {len(conll_phrases)} to {trim_dataset_size} examples"
         )
         conll_phrases = random.sample(conll_phrases, trim_dataset_size)
     mlflow.log_param("trimmed_dataset_size", len(conll_phrases))
 
-    logger.info(f"About to process {len(conll_phrases)} examples...")
+    logging.info(f"About to process {len(conll_phrases)} examples...")
 
     # conll_phrases = conll_phrases[:10]
 
@@ -152,7 +153,12 @@ def eval_ud(
         model, tokenizer, **kwargs
     )
     phrases_iterator = tqdm.tqdm(conll_phrases, unit="phrase")
-    heads_matching_sentence = [get_matching_heads_sentence(e) for e in phrases_iterator]
+    heads_matching_sentence = []
+    for phrase in phrases_iterator:
+        try:
+            heads_matching_sentence.append(get_matching_heads_sentence(phrase))
+        except UnprocessableSentenceException as e:
+            logging.exception(f"Error processing sentence {phrase}")
 
     variability_matrix = get_variability_matrix(
         model=model,
@@ -373,7 +379,7 @@ def plot_relations(
                         not kwargs["accept_bidirectional_relations"]
                     ):
                         # We don't accept bidirectional relations, so it's impossible that we'll have an attention pattern DEPENDANT -> HEAD
-                        logger.debug(
+                        logging.debug(
                             f'Skipping the dependency between {dependant_position} -> {head_position} ({example["forms"][dependant_position]} -> {example["forms"][head_position]})'
                         )
                         continue

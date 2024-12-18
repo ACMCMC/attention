@@ -229,6 +229,6 @@ for language, metadata in experiment_config["languages"].items():
                         f"CUDA memory usage after deleting model: reserved={torch.cuda.memory_reserved(0)}, allocated={torch.cuda.memory_allocated(0)}"
                     )
                 except Exception as e:
-                    logger.error(f"Error while evaluating {model_uri}: {e}")
+                    logger.exception(f"Error while evaluating {model_uri}")
                     mlflow.log_param("error", str(e))
                     mlflow.end_run(status="FAILED")

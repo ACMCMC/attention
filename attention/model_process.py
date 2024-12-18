@@ -6,11 +6,16 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 import re
 
 from attention.conll import parse_to_conllu
+from attention.max_attention_weights import join_subwords
 
 # %%
 from attention.max_attention_weights import (
     heads_matching_relation,
 )
+
+
+class UnprocessableSentenceException(Exception):
+    pass
 
 
 def get_attention_matrix(
@@ -30,7 +35,13 @@ def get_attention_matrix(
     # Join the words into a single string, but keep the words separated by spaces (beware: commas, periods, etc. would get an extra space)
     sentence = " ".join(words)
     # We need to take care of that extra space that would be added between punctuation and the previous word
-    sentence = re.sub(r"(\w)\s([^\w\s])", r"\1\2", sentence)
+    # e.g.: 'Over the past decades , the correction for sea surface roughness effects were studied based on the in - situ and airborne measurements ; for example , the experiments made from a tower [ 12 ] , wind and salinity experiments ( WISE ) [ 13 , 14 ] , airborne Passive - Active L - band Sensor ( PALS ) campaign [ 15 ] and Combined Airborne Radio instruments for Ocean and Land Studies ( CAROLS ) campaigns [ 16 , 17 ] .'
+    sentence = re.sub(r"([\w\{\[\(])\s([^\w\s\[\(\{])", r"\1\2", sentence)
+    # -> 'Over the past decades, the correction for sea surface roughness effects were studied based on the in- situ and airborne measurements; for example, the experiments made from a tower [ 12] , wind and salinity experiments ( WISE) [ 13, 14] , airborne Passive- Active L- band Sensor ( PALS) campaign [ 15] and Combined Airborne Radio instruments for Ocean and Land Studies ( CAROLS) campaigns [ 16, 17] .'
+    sentence = re.sub(r"([\-\–\[\(\{])\s", r"\1", sentence)
+    # -> 'Over the past decades, the correction for sea surface roughness effects were studied based on the in-situ and airborne measurements; for example, the experiments made from a tower [12] , wind and salinity experiments (WISE) [13, 14] , airborne Passive-Active L-band Sensor (PALS) campaign [15] and Combined Airborne Radio instruments for Ocean and Land Studies (CAROLS) campaigns [16, 17] .'
+    sentence = re.sub(r"([\}\]\)])\s([^\w\s])", r"\1\2", sentence)
+    # -> 'Over the past decades, the correction for sea surface roughness effects were studied based on the in-situ and airborne measurements; for example, the experiments made from a tower [12], wind and salinity experiments (WISE)[13, 14], airborne Passive-Active L-band Sensor (PALS) campaign [15] and Combined Airborne Radio instruments for Ocean and Land Studies (CAROLS) campaigns [16, 17].'
 
     # Get the tokenizer from the model
     encodings = tokenizer(
@@ -39,9 +50,6 @@ def get_attention_matrix(
         return_tensors="pt",
         return_attention_mask=False,
     )
-
-    # Squeeze the batch dimension
-    encodings = {key: value.squeeze(0) for key, value in encodings.items()}
 
     # Get the attention values from the model
     model.eval()
@@ -57,7 +65,7 @@ def get_attention_matrix(
     stacked_attentions = torch.stack(unstacked_attentions, dim=1)
 
     input_ids_as_string_tokens = tokenizer.convert_ids_to_tokens(
-        encodings["input_ids"]
+        encodings["input_ids"].squeeze()
     )
 
     # This is a list of words and their corresponding tokenized words
@@ -65,7 +73,9 @@ def get_attention_matrix(
     current_word_index = 0
     position_in_current_word = 0
     current_word_tokens = []
-    for token, (start, end) in zip(input_ids_as_string_tokens, encodings["offset_mapping"]):
+    for token, (start, end) in zip(
+        input_ids_as_string_tokens, encodings["offset_mapping"].squeeze()
+    ):
         # We'll add the lenghts of the tokens until we have a length that is equal to the length of the word
         # Let's imagine we have "you"
         # And it's tokenized into "Ġyo", "u"
@@ -91,7 +101,16 @@ def get_attention_matrix(
 
         assert current_word_index <= len(words)
 
-    from attention.max_attention_weights import join_subwords
+    # Assert that we have the same number of words and entries in the list
+
+    if len(words) != len(words_to_tokenized_words):
+        raise UnprocessableSentenceException(
+            f"Number of words: {len(words)}, "
+            f"Number of entries in the list: {len(words_to_tokenized_words)}, "
+            f"Words: {words}, "
+            f"List: {words_to_tokenized_words}"
+        )
+
 
     original_words_stacked_attention_matrix = join_subwords(
         stacked_attentions, words_to_tokenized_words
