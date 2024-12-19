@@ -4,6 +4,7 @@ import torch
 import transformers
 from transformers import PreTrainedModel, PreTrainedTokenizer
 import re
+import pandas as pd
 
 from attention.conll import parse_to_conllu
 from attention.max_attention_weights import join_subwords
@@ -16,6 +17,114 @@ from attention.max_attention_weights import (
 
 class UnprocessableSentenceException(Exception):
     pass
+
+
+def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words):
+    # This is a list of words and their corresponding tokenized words
+    words_to_tokenized_words = []
+    current_word_index = 0
+    position_in_current_word = 0
+    current_word_tokens = []
+    for token, (start, end), is_special_token in zip(
+        input_ids_as_string_tokens,
+        encodings["offset_mapping"].squeeze(),
+        encodings["special_tokens_mask"].squeeze(),
+    ):
+        # If this is a special token, we have to deal with it.
+        # For instance, this can happen with the [CLS] token that is added at the beginning of the sentence in BERT
+        if is_special_token:
+            # We'll add the special token as a word, but that word is None
+            words_to_tokenized_words.append((None, [token]))
+            continue
+
+        # We'll add the lenghts of the tokens until we have a length that is equal to the length of the word
+        # Let's imagine we have "you"
+        # And it's tokenized into "Ġyo", "u"
+        # We'll find the first shared character, "y", and add 1 to the position_in_current_word
+        # Then we'll find the second shared character, "o", and add 1 to the position_in_current_word
+        # ... and so on
+        current_word_tokens.append(
+            token
+        )  # By default, assume that this token is part of the current word
+        for i, character in enumerate(token):
+            if character == words[current_word_index][position_in_current_word]:
+                position_in_current_word += 1
+                if position_in_current_word > len(words[current_word_index]):
+                    raise ValueError(
+                        "The tokenized words are longer than the original words"
+                    )
+                if position_in_current_word == len(words[current_word_index]):
+                    # We have reached the end of the word
+                    words_to_tokenized_words.append(
+                        (words[current_word_index], current_word_tokens)
+                    )
+                    current_word_index += 1
+                    position_in_current_word = 0
+                    current_word_tokens = []
+                    # If this is not the end of the token, we could add it to the next word (this could fix the case where two words are only one token)
+                    # However, this would mean we'd have to rearrange the attention matrix, which is not ideal
+                    # So, we'll just ignore the token
+
+        assert current_word_index <= len(words)
+
+    # Assert that we have the same number of words and entries in the list, also adding special tokens
+    expected_number_of_words = len(words) + sum(
+        encodings["special_tokens_mask"].squeeze()
+    )
+
+    if expected_number_of_words != len(words_to_tokenized_words):
+        raise UnprocessableSentenceException(
+            f"Number of words: {len(words)}, "
+            f"Number of entries in the list: {len(words_to_tokenized_words)}, "
+            f"Words: {words}, "
+            f"List: {words_to_tokenized_words}"
+        )
+
+    return words_to_tokenized_words
+
+
+def adjust_conll_pd(conll_pd, words_to_tokenized_words):
+    """
+    Given that the model tokenizes the words, there might be a few extra tokens or missing tokens in the tokeniation that it performs.
+    We need to account for this in the CoNLL-U DataFrame by shifting the ID, HEAD and DEPS columns accordingly.
+    """
+    # The words_to_tokenized_words list has three possible cases:
+    # 1. The word is None (special token): In this case, there is 1+ token that corresponds to no word. We need to shift the conll_pd forward (i.e. add)
+    # 2. The word is not None, but its list of tokenized words is empty: This means that the model tokenized 2+ words into in token. We need to account for this by shifting the conll_pd backwards (i.e. subtract)
+    # 3. The word is not None, and its list of tokenized words is not empty: This is the normal case, where we have 1+ token that corresponds to 1 word. We don't need to do anything
+
+    # Use a working copy of the index to know what everything should be re-assigned to
+    index_working_copy = conll_pd.index.to_numpy().copy()
+
+    for i, (word, tokenized_words) in enumerate(words_to_tokenized_words):
+        if word is None:
+            # This is a special token - a word that does not show up in the dataframe but we still need to shift the indices forward
+            # Only shift from this point onwards, leave all previous indices as they are
+            index_working_copy[i:] += 1
+        elif len(tokenized_words) == 0:
+            # This is a word that was tokenized into 0 tokens - we need to shift the indices backwards
+            # Only shift from this point onwards, leave all previous indices as they are
+            index_working_copy[i:] -= 1
+
+    # Now, re-assign the indices (ID)
+    # The old index had a name ("ID") that we need to keep
+    # Turn the index_working_copy into a named index
+    index_working_copy = pd.Index(index_working_copy, name="ID")
+    conll_pd = conll_pd.set_index(index_working_copy, inplace=False)
+    # Also, re-assign the HEAD column by using the index_working_copy as a lookup table
+    conll_pd["HEAD"] = conll_pd["HEAD"].map(
+        # With the current value, look up the new value in that position of the index_working_copy
+        lambda head: index_working_copy[head] if head >= 0 else head # If head is -1, keep it as -1 (root)
+    )
+    # Also, re-assign the DEPS column by using the index_working_copy as a lookup table
+    conll_pd["DEPS"] = conll_pd["DEPS"].map(
+        # Deps is a list of ('relation', head) tuples
+        lambda deps: [
+            (relation, index_working_copy[head]) if head >= 0 else (relation, head) # If head is -1, keep it as -1 (root)
+            for relation, head in deps
+        ]
+    )
+    return conll_pd
 
 
 def get_attention_matrix(
@@ -49,6 +158,7 @@ def get_attention_matrix(
         return_offsets_mapping=True,
         return_tensors="pt",
         return_attention_mask=False,
+        return_special_tokens_mask=True,
     )
 
     # Get the attention values from the model
@@ -68,55 +178,23 @@ def get_attention_matrix(
         encodings["input_ids"].squeeze()
     )
 
-    # This is a list of words and their corresponding tokenized words
-    words_to_tokenized_words = []
-    current_word_index = 0
-    position_in_current_word = 0
-    current_word_tokens = []
-    for token, (start, end) in zip(
-        input_ids_as_string_tokens, encodings["offset_mapping"].squeeze()
-    ):
-        # We'll add the lenghts of the tokens until we have a length that is equal to the length of the word
-        # Let's imagine we have "you"
-        # And it's tokenized into "Ġyo", "u"
-        # We'll find the first shared character, "y", and add 1 to the position_in_current_word
-        # Then we'll find the second shared character, "o", and add 1 to the position_in_current_word
-        # ... and so on
-        current_word_tokens.append(token)
-        for i, character in enumerate(token):
-            if character == words[current_word_index][position_in_current_word]:
-                position_in_current_word += 1
-                if position_in_current_word > len(words[current_word_index]):
-                    raise ValueError(
-                        "The tokenized words are longer than the original words"
-                    )
-                if position_in_current_word == len(words[current_word_index]):
-                    # We have reached the end of the word
-                    words_to_tokenized_words.append(
-                        (words[current_word_index], current_word_tokens)
-                    )
-                    current_word_index += 1
-                    position_in_current_word = 0
-                    current_word_tokens = []
-
-        assert current_word_index <= len(words)
-
-    # Assert that we have the same number of words and entries in the list
-
-    if len(words) != len(words_to_tokenized_words):
-        raise UnprocessableSentenceException(
-            f"Number of words: {len(words)}, "
-            f"Number of entries in the list: {len(words_to_tokenized_words)}, "
-            f"Words: {words}, "
-            f"List: {words_to_tokenized_words}"
-        )
-
-
-    original_words_stacked_attention_matrix = join_subwords(
-        stacked_attentions, words_to_tokenized_words
+    words_to_tokenized_words = get_words_to_tokenized_words(
+        input_ids_as_string_tokens=input_ids_as_string_tokens,
+        encodings=encodings,
+        words=words,
     )
 
-    return original_words_stacked_attention_matrix.cpu()
+    original_words_stacked_attention_matrix = join_subwords(
+        attention_matrix=stacked_attentions,
+        special_tokens_mask=encodings["special_tokens_mask"],
+        words_to_tokenized_words=words_to_tokenized_words,
+    )
+
+    adjusted_conll_pd = adjust_conll_pd(
+        conll_pd=conll_pd, words_to_tokenized_words=words_to_tokenized_words
+    )
+
+    return original_words_stacked_attention_matrix.cpu(), adjusted_conll_pd
 
 
 # %%
@@ -130,7 +208,7 @@ if __name__ == "__main__":
     MODEL = "bert-base-uncased"
     model = transformers.AutoModelForMaskedLM.from_pretrained(MODEL)
 
-    original_words_stacked_attention_matrix = get_attention_matrix(
+    original_words_stacked_attention_matrix, adjusted_conll_pd = get_attention_matrix(
         conll_pd, model=model
     )
     original_words_unstacked_attentions = torch.unbind(

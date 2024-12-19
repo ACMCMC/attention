@@ -265,7 +265,7 @@ def generate_fn_get_matching_heads_sentence(
                 row["DEPREL"],
             )
             for index, row in conll_pd.iterrows()
-            if row["HEAD"] > -1
+            if row["HEAD"] >= 0
         ]
         dependencies_head_and_dependant = [
             (dependent_word, head_word)
@@ -274,7 +274,7 @@ def generate_fn_get_matching_heads_sentence(
         dependencies_reltype = [relation for (_, _, relation) in dependencies]
 
         # Take all the words in the sentence and get the heads matching the relation
-        attention_matrix = get_attention_matrix(
+        attention_matrix, adjusted_conll_pd = get_attention_matrix(
             conll_pd=conll_pd, model=model, tokenizer=tokenizer
         )
         if kwargs["remove_self_attention"]:
@@ -284,19 +284,14 @@ def generate_fn_get_matching_heads_sentence(
             )
         
         heads_matching_rel = heads_matching_relation(
-            conll_pd,
+            conll_pd=adjusted_conll_pd,
             attention_matrix=attention_matrix,
             accept_bidirectional_relations=kwargs["accept_bidirectional_relations"],
         )
-        # The result is a list of tuples (layer, head, head_word, dependent_word)
-        # Only keep the tuples that have a dependent_word matching the relation
-        # For every tuple, get the dependent_word and check if it matches the relation. The dependent_word is in position 3, and it is a string, so we need to get the row with that word in the column FORM and check its DEPREL
-        heads_matching_rel = [
-            (*t, conll_pd[conll_pd["FORM"] == t[2]]["DEPREL"].values[0])
-            for t in heads_matching_rel
-        ]
+        # The result is a list of tuples (layer, head, head_word_id, dependent_word_id, dependency)
+
         matching_heads_layer_and_head = [
-            (layer, head) for (layer, head, _, _, dependency) in heads_matching_rel
+            (layer, head) for (layer, head, _, _, _) in heads_matching_rel
         ]
         matching_heads_dependency = [
             dependency for (_, _, _, _, dependency) in heads_matching_rel
@@ -315,7 +310,7 @@ def generate_fn_get_matching_heads_sentence(
             "matching_heads_variability": matching_heads_variability,
             "dependencies_head_and_dependant": dependencies_head_and_dependant,
             "dependencies_reltype": dependencies_reltype,
-            "forms": conll_pd["FORM"],
+            "forms": adjusted_conll_pd["FORM"],
             "attention_matrix": attention_matrix,
             "max_attention_weights": max_attention_weights(attention_matrix),
         }

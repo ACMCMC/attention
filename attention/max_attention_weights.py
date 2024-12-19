@@ -28,7 +28,7 @@ def max_attention_weights(attention_matrix):
 
 
 def heads_matching_relation(
-    conll: pd.DataFrame,
+    conll_pd: pd.DataFrame,
     attention_matrix: torch.Tensor,
     accept_bidirectional_relations=False,
 ):
@@ -47,43 +47,64 @@ def heads_matching_relation(
 
     indices_of_max_attention = max_attention_weights(attention_matrix)
 
-    def process_one_row(head_index, dependant_index):
+    def process_one_row(head_word_index: int, dependant_word_index: int, deprel: str):
         # Go through all the words in the phrase to find the heads matching relation
-        head_word = conll.loc[head_index]["FORM"]
-        current_word = conll.loc[dependant_index]["FORM"]
-        # print(f'head: {head}, i: {i}, head_word: {head_word}, current_word: {current_word}')
+
         # From the attention matrix, get all the elements where the last dimension in position i is equal to the head. Get their indices only
         heads_matching_this_relation = torch.where(
-            indices_of_max_attention[:, :, :, dependant_index] == (head_index)
+            indices_of_max_attention[:, :, :, dependant_word_index] == (head_word_index)
         )  # -1 because the indices start at 0
         # Iterate over the indices of the heads matching this relation
         # print(f'Heads matching this relation: {heads_matching_this_relation}')
         for batch, layer, head_index in zip(*heads_matching_this_relation):
             heads_matching_relations.append(
-                (layer.item(), head_index.item(), current_word, head_word)
+                # Return word indices instead of the word itself because we might have multiple instances of the same word in the phrase (e.g. "the" in "the man likes the proposal")
+                (layer.item(), head_index.item(), head_word_index, dependant_word_index, deprel)
             )
 
-    for current_row_index, row in conll.iterrows():
-        dependant_index = current_row_index
-        head_index = row["HEAD"]
+    for current_row_index, row in conll_pd.iterrows():
+        # The index is not necessarily monotonic (e.g. 1, 3, 4, 5...), but this is OK as the iterrows() function will return the value in the ID index, rather than a pure range index (0, 1, 2...)
+        dependant_word_index = current_row_index
+        head_word_index = row["HEAD"]
+        deprel = row["DEPREL"]
         # If the head is -1, then it is the root word, so we skip it
-        if head_index == -1:
+        if head_word_index == -1:
             continue  # Skip the root word. No need to check in the reverse direction because this word only "depends on" itself
-        process_one_row(head_index=head_index, dependant_index=dependant_index)
+        process_one_row(
+            head_word_index=head_word_index,
+            dependant_word_index=dependant_word_index,
+            deprel=deprel,
+        )
 
         if accept_bidirectional_relations:
             # Repeat the process, but in the reverse order (HEAD -> DEPENDANT)
 
-            # This is the inverse of above
-            dependant_index = row["HEAD"]
-            head_index = current_row_index
-            process_one_row(head_index=head_index, dependant_index=dependant_index)
+
+            dependant_word_index = row["HEAD"]
+            head_word_index = current_row_index
+            deprel = conll_pd.loc[dependant_word_index]["DEPREL"]
+            # In some rare cases, we have multiple heads for the same word (i.e. the ID is the same for multiple words).
+            # So here, the DEPREL would be a Series. If that is the case, we run the process for each of the heads
+            if isinstance(deprel, pd.Series):
+                for deprel_value in deprel:
+                    process_one_row(
+                        head_word_index=head_word_index,
+                        dependant_word_index=dependant_word_index,
+                        deprel=deprel_value,
+                    )
+            else:
+                process_one_row(
+                    head_word_index=head_word_index,
+                    dependant_word_index=dependant_word_index,
+                    deprel=deprel,
+                )
     return heads_matching_relations
 
 
 # %%
 def join_subwords(
     attention_matrix: torch.Tensor,
+    special_tokens_mask: torch.Tensor,
     words_to_tokenized_words: List[Tuple[str, List[str]]],
 ):
     """
@@ -100,49 +121,29 @@ def join_subwords(
     # Sum the attention weights of the subwords on dimension -1 for the tokens that belong to the same word
     # The result is a tensor of shape [batch_size, num_heads, sequence_length, words]
     current_position = 0
-    for (word, tokenized_words) in words_to_tokenized_words:
+    for word, tokenized_words in words_to_tokenized_words:
+        if word is None:
+            # This can happen with e.g. the [CLS] token in BERT
+            # In this case, leave it as-is (treat it as any other token)
+            pass
+
         if len(tokenized_words) == 0:
+            # This should never happen
             # There may be some very rare cases where 1+ CONLL-U words are tokenized into 1 (e.g. CONLL ["[", "16"] -> ["[16"])
-            # Add a fake row and column of zeros
-            new_attention_matrix = torch.cat(
-                [
-                    new_attention_matrix[:, :, :, :, : current_position],
-                    torch.zeros(
-                        new_attention_matrix.shape[0],
-                        new_attention_matrix.shape[1],
-                        new_attention_matrix.shape[2],
-                        new_attention_matrix.shape[3],
-                        1,
-                    ),
-                    new_attention_matrix[:, :, :, :, current_position :],
-                ],
-                dim=-1,
-            )
-            new_attention_matrix = torch.cat(
-                [
-                    new_attention_matrix[:, :, :, : current_position, :],
-                    torch.zeros(
-                        new_attention_matrix.shape[0],
-                        new_attention_matrix.shape[1],
-                        new_attention_matrix.shape[2],
-                        1,
-                        new_attention_matrix.shape[4],
-                    ),
-                    new_attention_matrix[:, :, :, current_position :, :],
-                ],
-                dim=-2,
+            logging.warning(
+                f"The tokenized words list is empty for word {word} (in {words_to_tokenized_words})"
             )
         elif len(tokenized_words) == 1:
-            pass
+            # If there is only one tokenized word, there is nothing to do
+            current_position += 1
         else:
             # Sum the attention weights of the subwords on dimension -1 for the tokens that belong to the same word
-            # print(f'old: {new_attention_matrix[0,0,0,:,:]}')
             for j in range(len(tokenized_words)):
                 if j == 0:
                     continue
-                new_attention_matrix[:, :, :, :, current_position] += new_attention_matrix[
-                    :, :, :, :, current_position + j
-                ]
+                new_attention_matrix[
+                    :, :, :, :, current_position
+                ] += new_attention_matrix[:, :, :, :, current_position + j]
                 # Set the attention weights of the subwords to 0
                 new_attention_matrix[:, :, :, :, current_position + j] = 0
             # Remove the positions from i + 1 to i + j
@@ -157,9 +158,9 @@ def join_subwords(
             for j in range(len(tokenized_words)):
                 if j == 0:
                     continue
-                new_attention_matrix[:, :, :, current_position, :] += new_attention_matrix[
-                    :, :, :, current_position + j, :
-                ]
+                new_attention_matrix[
+                    :, :, :, current_position, :
+                ] += new_attention_matrix[:, :, :, current_position + j, :]
                 # Set the attention weights of the subwords to 0
                 new_attention_matrix[:, :, :, current_position + j, :] = 0
             # Average the attention weights of the subwords
@@ -172,12 +173,25 @@ def join_subwords(
                 ],
                 dim=-2,
             )
-            # print(f'new: {new_attention_matrix[0,0,0,:,:]}')
-        current_position += 1 # Move to the next word
-    
+
+            current_position += 1  # Move to the next word
+
     # Assert that the new attention matrix has the same shape in the last two dimensions as the number of words
-    assert new_attention_matrix.shape[-1] == len(words_to_tokenized_words)
-    assert new_attention_matrix.shape[-2] == len(words_to_tokenized_words)
+    expected_final_number_of_tokens = len(words_to_tokenized_words)
+    # Subtract the elements that have empty tokenized word lists
+    expected_final_number_of_tokens -= len(
+        [
+            word
+            for word, tokenized_words in words_to_tokenized_words
+            if len(tokenized_words) == 0
+        ]
+    )
+
+    expected_final_shape = torch.Size(
+        attention_matrix.size()[:-2]
+        + (expected_final_number_of_tokens, expected_final_number_of_tokens)
+    )
+    assert new_attention_matrix.size() == expected_final_shape
 
     return new_attention_matrix
 

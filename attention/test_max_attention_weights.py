@@ -123,7 +123,7 @@ def test_heads_matching_relation():
     attention_matrix[0, :, 2, 2:3, 2] = torch.ones([2, 1])
 
     result = heads_matching_relation(
-        conll=conll,
+        conll_pd=conll,
         attention_matrix=attention_matrix,
         accept_bidirectional_relations=False,
     )
@@ -133,7 +133,7 @@ def test_heads_matching_relation():
 
     # Now, repeat the process, but with bidirectional relations
     result = heads_matching_relation(
-        conll=conll,
+        conll_pd=conll,
         attention_matrix=attention_matrix,
         accept_bidirectional_relations=True,
     )
