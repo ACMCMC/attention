@@ -154,11 +154,17 @@ def eval_ud(
     )
     phrases_iterator = tqdm.tqdm(conll_phrases, unit="phrase")
     heads_matching_sentence = []
+    num_of_errored_phrases = 0
     for phrase in phrases_iterator:
         try:
             heads_matching_sentence.append(get_matching_heads_sentence(phrase))
         except UnprocessableSentenceException as e:
             logging.exception(f"Error processing sentence {phrase}")
+            num_of_errored_phrases += 1
+
+    logging.info(
+        f"Processed {len(heads_matching_sentence)} examples. {num_of_errored_phrases} examples could not be processed (they raised an UnprocessableSentenceException)"
+    )
 
     variability_matrix = get_variability_matrix(
         model=model,

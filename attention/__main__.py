@@ -13,7 +13,7 @@ import yaml
 from dotenv import load_dotenv
 from huggingface_hub import HfApi
 
-from attention.conll import get_all_possible_conll_phrases
+from attention.conll import get_all_possible_conll_phrases, filter_out_null_head_examples
 
 from .dataset_eval import eval_ud
 
@@ -134,6 +134,9 @@ for language, metadata in experiment_config["languages"].items():
         conll_phrases: List[List[Dict[str, Any]]] = get_all_possible_conll_phrases(
             path_to_conll_dataset
         )
+
+        # Filter out examples where the HEAD is null
+        conll_phrases = filter_out_null_head_examples(conll_phrases)
 
         for model_uri in models_to_evaluate:
             with mlflow.start_run(

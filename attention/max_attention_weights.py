@@ -119,7 +119,7 @@ def join_subwords(
         if len(tokenized_words) == 0:
             # This should never happen
             # There may be some very rare cases where 1+ CONLL-U words are tokenized into 1 (e.g. CONLL ["[", "16"] -> ["[16"])
-            logging.warning(
+            logging.debug(
                 f"The tokenized words list is empty for word {word} (in {words_to_tokenized_words})"
             )
         elif len(tokenized_words) == 1:

@@ -12,6 +12,7 @@ import spacy
 from conllu import parse
 from pandas import DataFrame
 from spacy.tokens import Doc
+from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 # %%
@@ -51,6 +52,23 @@ def parse_to_conllu(phrase: str) -> DataFrame:
         conll = conll.reset_index(drop=True)
         # Call the index ID again
     return conll
+
+
+def filter_out_null_head_examples(conll_phrases: List[List[Dict[str, Any]]]) -> List[List[Dict[str, Any]]]:
+    """
+    Filter out rows where the HEAD is null.
+
+    :param conll: The CoNLL-U DataFrame.
+    :return: The filtered CoNLL-U DataFrame.
+    """
+    original_count = len(conll_phrases)
+    conll_phrases_filtered = [
+        conll_phrase for conll_phrase in conll_phrases if all(word["HEAD"] is not None for word in conll_phrase)
+    ]
+    filtered_count = len(conll_phrases_filtered)
+    if original_count != filtered_count:
+        logger.warning(f"Filtered out {original_count - filtered_count} examples where the HEAD is null.")
+    return conll_phrases_filtered
 
 
 # %%

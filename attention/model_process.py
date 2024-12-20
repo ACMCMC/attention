@@ -5,6 +5,7 @@ import transformers
 from transformers import PreTrainedModel, PreTrainedTokenizer
 import re
 import pandas as pd
+import unicodedata
 
 from attention.conll import parse_to_conllu
 from attention.max_attention_weights import join_subwords
@@ -19,7 +20,22 @@ class UnprocessableSentenceException(Exception):
     pass
 
 
-def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words):
+def remove_diacritics(text):
+    """
+    Remove diacritics from the text
+
+    This is useful because some models have trouble with diacritics. Specifically, the tokenization - detokenization process is not perfectly symmetrical so the Unicode characters are not exactly the same. The way to fix this is to remove the diacritics from the text before doing text-based comparisons.
+    """
+    return "".join([c for c in unicodedata.normalize('NFKD', text) if not unicodedata.combining(c)])
+
+
+def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words_with_diacritics: list):
+    """
+    Given the input_ids as string tokens and the encodings, get the words and their corresponding tokenized words
+    """
+    # Remove diacritics in the words - in some models, diacritics impede identification (because the tokenization - detokenization process is not perfectly symmetrical so the Unicode characters are not exactly the same)
+    words_without_diacritics = [remove_diacritics(word) for word in words_with_diacritics]
+
     # This is a list of words and their corresponding tokenized words
     words_to_tokenized_words = []
     current_word_index = 0
@@ -46,17 +62,21 @@ def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words):
         current_word_tokens.append(
             token
         )  # By default, assume that this token is part of the current word
-        for i, character in enumerate(token):
-            if character == words[current_word_index][position_in_current_word]:
+
+        # Remove diacritics in the token - in some models, this impedes identification (because the tokenization - detokenization process is not perfectly symmetrical so the Unicode characters are not exactly the same)
+        token_without_diacritics = remove_diacritics(token)
+
+        for i, character in enumerate(token_without_diacritics):
+            if character == words_without_diacritics[current_word_index][position_in_current_word]:
                 position_in_current_word += 1
-                if position_in_current_word > len(words[current_word_index]):
+                if position_in_current_word > len(words_without_diacritics[current_word_index]):
                     raise ValueError(
                         "The tokenized words are longer than the original words"
                     )
-                if position_in_current_word == len(words[current_word_index]):
+                if position_in_current_word == len(words_without_diacritics[current_word_index]):
                     # We have reached the end of the word
                     words_to_tokenized_words.append(
-                        (words[current_word_index], current_word_tokens)
+                        (words_with_diacritics[current_word_index], current_word_tokens)
                     )
                     current_word_index += 1
                     position_in_current_word = 0
@@ -65,18 +85,16 @@ def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words):
                     # However, this would mean we'd have to rearrange the attention matrix, which is not ideal
                     # So, we'll just ignore the token
 
-        assert current_word_index <= len(words)
+        assert current_word_index <= len(words_with_diacritics), f"Current word index: {current_word_index}, words: {words_with_diacritics}"
 
     # Assert that we have the same number of words and entries in the list, also adding special tokens
-    expected_number_of_words = len(words) + sum(
+    expected_number_of_words = len(words_with_diacritics) + sum(
         encodings["special_tokens_mask"].squeeze()
     )
 
     if expected_number_of_words != len(words_to_tokenized_words):
         raise UnprocessableSentenceException(
-            f"Number of words: {len(words)}, "
-            f"Number of entries in the list: {len(words_to_tokenized_words)}, "
-            f"Words: {words}, "
+            f"Words: {words_with_diacritics}, "
             f"List: {words_to_tokenized_words}"
         )
 
@@ -188,7 +206,7 @@ def get_attention_matrix(
     words_to_tokenized_words = get_words_to_tokenized_words(
         input_ids_as_string_tokens=input_ids_as_string_tokens,
         encodings=encodings,
-        words=words,
+        words_with_diacritics=words,
     )
 
     original_words_stacked_attention_matrix = join_subwords(
@@ -197,9 +215,14 @@ def get_attention_matrix(
         words_to_tokenized_words=words_to_tokenized_words,
     )
 
-    adjusted_conll_pd = adjust_conll_pd(
-        conll_pd=conll_pd, words_to_tokenized_words=words_to_tokenized_words
-    )
+    try:
+        adjusted_conll_pd = adjust_conll_pd(
+            conll_pd=conll_pd, words_to_tokenized_words=words_to_tokenized_words
+        )
+    except TypeError as e:
+        raise UnprocessableSentenceException(
+            f"Could not adjust the CoNLL-U DataFrame for sentence {sentence}. Conll: {conll_pd}, words_to_tokenized_words: {words_to_tokenized_words}"
+        ) from e
 
     return original_words_stacked_attention_matrix.cpu(), adjusted_conll_pd
 
