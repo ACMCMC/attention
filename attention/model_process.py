@@ -174,9 +174,16 @@ def get_attention_matrix(
     unstacked_attentions = outputs["attentions"]
     stacked_attentions = torch.stack(unstacked_attentions, dim=1)
 
-    input_ids_as_string_tokens = tokenizer.convert_ids_to_tokens(
-        encodings["input_ids"].squeeze()
-    )
+    try:
+        input_ids_as_string_tokens = tokenizer.convert_ids_to_tokens(
+            encodings["input_ids"].squeeze()
+        )
+    except TypeError as e:
+        # If the sentence is empty, the input_ids will be empty, and we can't convert that to tokens
+        # It would throw TypeError("iteration over a 0-d tensor")
+        raise UnprocessableSentenceException(
+            f"Could not convert input_ids to tokens for sentence {sentence}"
+        ) from e
 
     words_to_tokenized_words = get_words_to_tokenized_words(
         input_ids_as_string_tokens=input_ids_as_string_tokens,
