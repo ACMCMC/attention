@@ -79,25 +79,14 @@ def heads_matching_relation(
         if accept_bidirectional_relations:
             # Repeat the process, but in the reverse order (HEAD -> DEPENDANT)
 
-
             dependant_word_index = row["HEAD"]
             head_word_index = current_row_index
-            deprel = conll_pd.loc[dependant_word_index]["DEPREL"]
-            # In some rare cases, we have multiple heads for the same word (i.e. the ID is the same for multiple words).
-            # So here, the DEPREL would be a Series. If that is the case, we run the process for each of the heads
-            if isinstance(deprel, pd.Series):
-                for deprel_value in deprel:
-                    process_one_row(
-                        head_word_index=head_word_index,
-                        dependant_word_index=dependant_word_index,
-                        deprel=deprel_value,
-                    )
-            else:
-                process_one_row(
-                    head_word_index=head_word_index,
-                    dependant_word_index=dependant_word_index,
-                    deprel=deprel,
-                )
+            deprel = row["DEPREL"]
+            process_one_row(
+                head_word_index=head_word_index,
+                dependant_word_index=dependant_word_index,
+                deprel=deprel,
+            )
     return heads_matching_relations
 
 
