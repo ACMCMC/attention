@@ -96,15 +96,23 @@ def adjust_conll_pd(conll_pd, words_to_tokenized_words):
     # Use a working copy of the index to know what everything should be re-assigned to
     index_working_copy = conll_pd.index.to_numpy().copy()
 
+    number_of_special_tokens = 0
+
     for i, (word, tokenized_words) in enumerate(words_to_tokenized_words):
+        # If for example the first token is a special token, then we need to keep looking at the index_working_copy from the start - the first element in the index is not that special token, but actually the first word
+        current_index_in_index_working_copy = i - number_of_special_tokens
         if word is None:
             # This is a special token - a word that does not show up in the dataframe but we still need to shift the indices forward
             # Only shift from this point onwards, leave all previous indices as they are
-            index_working_copy[i:] += 1
+            index_working_copy[current_index_in_index_working_copy:] += 1
+            number_of_special_tokens += 1
         elif len(tokenized_words) == 0:
             # This is a word that was tokenized into 0 tokens - we need to shift the indices backwards
             # Only shift from this point onwards, leave all previous indices as they are
-            index_working_copy[i:] -= 1
+            index_working_copy[current_index_in_index_working_copy:] -= 1
+
+    # The length of the index_working_copy should be the same as the number of (post-aggregation) non-special tokens
+    assert len(index_working_copy) == len(words_to_tokenized_words) - number_of_special_tokens
 
     # Now, re-assign the indices (ID)
     # The old index had a name ("ID") that we need to keep
@@ -124,6 +132,7 @@ def adjust_conll_pd(conll_pd, words_to_tokenized_words):
             for relation, head in deps
         ]
     )
+
     return conll_pd
 
 
