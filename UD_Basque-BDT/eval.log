@@ -1,0 +1,46 @@
+Running the following version of UD tools:
+commit 78ce4b21495c6e4c17a7b07925bec1267d833d14
+Author: Dan Zeman <zeman@ufal.mff.cuni.cz>
+Date:   Sun May 5 09:21:16 2024 +0200
+Evaluating the following revision of UD_Basque-BDT:
+commit f13d05e6772cb6e00a10984c29570b859a852759
+Merge: bfadc42 6570627
+Author: Dan Zeman <zeman@ufal.mff.cuni.cz>
+Size: counted 121443 of 121443 words (nodes).
+Size: min(0, log((N/1000)**2)) = 9.59889003379901.
+Size: maximum value 13.815511 is for 1000000 words or more.
+Split: Found more than 10000 training words.
+Split: Found at least 10000 development words.
+Split: Found at least 10000 test words.
+Lemmas: source of annotation (from README) factor is 0.4.
+Universal POS tags: 17 out of 17 found in the corpus.
+Universal POS tags: source of annotation (from README) factor is 0.8.
+Features: 77136 out of 121443 total words have one or more features.
+Features: source of annotation (from README) factor is 0.8.
+Universal relations: 32 out of 37 found in the corpus.
+Universal relations: source of annotation (from README) factor is 0.8.
+Udapi:
+               TOTAL       8212
+Udapi: found 8212 bugs.
+Udapi: worst expected case (threshold) is one bug per 10 words. There are 121443 words.
+Genres: found 1 out of 17 known.
+/net/work/people/zeman/unidep/tools/validate.py --lang eu --max-err=10 UD_Basque-BDT/eu_bdt-ud-dev.conllu
+*** PASSED ***
+/net/work/people/zeman/unidep/tools/validate.py --lang eu --max-err=10 UD_Basque-BDT/eu_bdt-ud-test.conllu
+*** PASSED ***
+/net/work/people/zeman/unidep/tools/validate.py --lang eu --max-err=10 UD_Basque-BDT/eu_bdt-ud-train.conllu
+[Line 68573 Sent train-s4336 Node 3]: [L3 Warning fixed-gap] Gaps in fixed expression [3, 10] 'azaldu * * * * * * nahiz'
+Warnings: 1
+*** PASSED ***
+Validity: 1
+(weight=0.0769230769230769) * (score{features}=0.8) = 0.0615384615384615
+(weight=0.0769230769230769) * (score{genres}=0.0588235294117647) = 0.00452488687782805
+(weight=0.0769230769230769) * (score{lemmas}=0.4) = 0.0307692307692308
+(weight=0.256410256410256) * (score{size}=0.694790829012505) = 0.178151494618591
+(weight=0.0512820512820513) * (score{split}=1) = 0.0512820512820513
+(weight=0.0769230769230769) * (score{tags}=0.8) = 0.0615384615384615
+(weight=0.307692307692308) * (score{udapi}=0.323797995767562) = 0.0996301525438652
+(weight=0.0769230769230769) * (score{udeprels}=0.691891891891892) = 0.0532224532224532
+(TOTAL score=0.540657192390942) * (availability=1) * (validity=1) = 0.540657192390942
+STARS = 2.5
+UD_Basque-BDT	0.540657192390942	2.5

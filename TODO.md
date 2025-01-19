@@ -1,0 +1,2 @@
+- só contar como atenção correctamente mapeada com conll, se aparece polo menos 1 vez (disjunção) ou em todos os subtokens (conjunção)
+- Remake script to get average statistics from results, because right now it's just a dummy script. 

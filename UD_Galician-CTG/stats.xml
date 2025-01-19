@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<treebank>
+  <!-- tokens means "surface tokens", e.g. Spanish "vámonos" counts as one token
+       words means "syntactic words", e.g. Spanish "vámonos" is split to two words, "vamos" and "nos"
+       fused is the number of tokens that are split to two or more syntactic words
+       The words and fused elements can be omitted if no token is split to smaller syntactic words. -->
+  <size>
+    <total><sentences>3993</sentences><tokens>126011</tokens><words>138837</words><fused>12750</fused></total>
+    <train><sentences>2272</sentences><tokens>71928</tokens><words>79327</words><fused>7349</fused></train>
+    <dev><sentences>860</sentences><tokens>27009</tokens><words>29772</words><fused>2749</fused></dev>
+    <test><sentences>861</sentences><tokens>27074</tokens><words>29738</words><fused>2652</fused></test>
+  </size>
+  <lemmas unique="10536" /><!-- o, de, ,, en, ., e, que, se, a, un, ser, por, con, para, este -->
+  <forms unique="16139" /><!-- de, a, o, ,, en, ., e, que, os, se, as, por, un, unha, con -->
+  <fusions unique="1211" /><!-- do, da, no, dos, na, das, ao, á, nos, ó, polo, nas, co, pola, dun -->
+  <!-- Statistics of universal POS tags. The comments show the most frequent lemmas. -->
+  <tags unique="16">
+    <tag name="ADJ">11429</tag><!-- maior, novo, galego, social, xeral, público, seguinte, económico, primeiro, medio -->
+    <tag name="ADP">23174</tag><!-- de, en, a, por, con, para, entre, sobre, sen, ata -->
+    <tag name="ADV">3350</tag><!-- máis, tamén, así, xa, tanto, aínda, só, moi, dentro, ademais -->
+    <tag name="AUX">2738</tag><!-- ser, poder, estar, deber, haber, ter, ir, seguir, deixar, vir -->
+    <tag name="CCONJ">4269</tag><!-- e, ou, pero, senón, nin, mais, et, quer, como, emporiso -->
+    <tag name="DET">23907</tag><!-- o, un, este, seu, outro, todo, mesmo, cada, algún, ese -->
+    <tag name="INTJ">8</tag><!-- epa, ea, ó -->
+    <tag name="NOUN">31964</tag><!-- ano, caso, á, empresa, parte, dous, valor, lei, número, muller -->
+    <tag name="NUM">2363</tag><!-- 2, 1, 5, 3, 2003, 20, 2005, 2002, 2004, 10 -->
+    <tag name="PART">689</tag><!-- non, senon, föhn, ln, on -->
+    <tag name="PRON">5912</tag><!-- se, que, como, o, el, lle, cando, onde, me, nos -->
+    <tag name="PROPN">1904</tag><!-- galicia, españa, coruña, lugo, santiago, europa, ourense, pontevedra, galiza, internet -->
+    <tag name="PUNCT">13316</tag><!-- ,, ., ), (, :, ", _, ;, /, ... -->
+    <tag name="SCONJ">1606</tag><!-- que, como, se, porque, coma, pois, ca, mentres, malia, cando -->
+    <tag name="SYM">428</tag><!-- %, =, +, _, &, <, > -->
+    <tag name="VERB">11780</tag><!-- ter, facer, realizar, establecer, presentar, dar, producir, considerar, ser, permitir -->
+  </tags>
+  <!-- Statistics of features and values. The comments show the most frequent word forms. -->
+  <feats unique="2">
+    <feat name="Foreign" value="Yes" upos="ADJ,ADP,ADV,DET,NOUN,NUM,PART,PRON,PROPN,SYM,VERB">169</feat><!-- táboa, de, +, 1, 10, 20, 23, 70, Capítulo, cadro -->
+    <feat name="Polarity" value="Neg" upos="PART">120</feat><!-- non -->
+  </feats>
+  <!-- Statistics of universal dependency relations. -->
+  <deps unique="29">
+    <dep name="acl">5</dep>
+    <dep name="advcl">4</dep>
+    <dep name="advmod">2083</dep>
+    <dep name="amod">10535</dep>
+    <dep name="appos">6</dep>
+    <dep name="aux">1198</dep>
+    <dep name="case">24405</dep>
+    <dep name="cc">4428</dep>
+    <dep name="ccomp">7157</dep>
+    <dep name="compound">147</dep>
+    <dep name="conj">22</dep>
+    <dep name="cop">1540</dep>
+    <dep name="dep">3848</dep>
+    <dep name="det">23784</dep>
+    <dep name="discourse">1</dep>
+    <dep name="fixed">1</dep>
+    <dep name="flat">172</dep>
+    <dep name="iobj">562</dep>
+    <dep name="list">4</dep>
+    <dep name="mark">1507</dep>
+    <dep name="nmod">18694</dep>
+    <dep name="nsubj">6523</dep>
+    <dep name="nummod">553</dep>
+    <dep name="obj">7389</dep>
+    <dep name="obl">6299</dep>
+    <dep name="parataxis">2</dep>
+    <dep name="punct">13316</dep>
+    <dep name="root">3993</dep>
+    <dep name="xcomp">659</dep>
+  </deps>
+</treebank>
