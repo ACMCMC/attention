@@ -34,7 +34,9 @@ def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words_wi
     Given the input_ids as string tokens and the encodings, get the words and their corresponding tokenized words
     """
     # Remove diacritics in the words - in some models, diacritics impede identification (because the tokenization - detokenization process is not perfectly symmetrical so the Unicode characters are not exactly the same)
-    words_without_diacritics = [remove_diacritics(word) for word in words_with_diacritics]
+    words_without_diacritics = [remove_diacritics(word).lower() for word in words_with_diacritics]
+    # Also, some models lowercase the words, so we need to do that as well (e.g. BERT uncased)
+    normalized_words = [(word).lower() for word in words_without_diacritics]
 
     # This is a list of words and their corresponding tokenized words
     words_to_tokenized_words = []
@@ -67,13 +69,13 @@ def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words_wi
         token_without_diacritics = remove_diacritics(token)
 
         for i, character in enumerate(token_without_diacritics):
-            if character == words_without_diacritics[current_word_index][position_in_current_word]:
+            if character == normalized_words[current_word_index][position_in_current_word]:
                 position_in_current_word += 1
-                if position_in_current_word > len(words_without_diacritics[current_word_index]):
+                if position_in_current_word > len(normalized_words[current_word_index]):
                     raise ValueError(
                         "The tokenized words are longer than the original words"
                     )
-                if position_in_current_word == len(words_without_diacritics[current_word_index]):
+                if position_in_current_word == len(normalized_words[current_word_index]):
                     # We have reached the end of the word
                     words_to_tokenized_words.append(
                         (words_with_diacritics[current_word_index], current_word_tokens)
