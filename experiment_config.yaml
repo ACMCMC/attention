@@ -1,0 +1,70 @@
+experiment_name: experiment_1
+languages:
+  en:
+    language: en
+    path_to_conll_dataset: UD_English-GUM/en_gum-ud-train.conllu
+    models:
+    - microsoft/Phi-3-mini-4k-instruct
+  gl:
+    language: gl
+    path_to_conll_dataset: UD_Galician-TreeGal/gl_treegal-ud-train.conllu
+    models:
+    - marcosgg/bert-base-gl-cased
+    - proxectonos/Carballo-bloom-1.3B
+    # These models are copied from Portuguese - how do they perform in Galician?
+    - PORTULAN/albertina-900m-portuguese-ptpt-encoder
+    - NOVA-vision-language/GlorIA-1.3B
+  fr:
+    language: fr
+    path_to_conll_dataset: UD_French-Sequoia/fr_sequoia-ud-train.conllu
+    models:
+    - almanach/camembertav2-base
+    - OpenLLM-France/Claire-Mistral-7B-0.1
+  tr:
+    language: tr
+    path_to_conll_dataset: UD_Turkish-Penn/tr_penn-ud-train.conllu
+    models:
+    - loodos/bert-base-turkish-uncased
+    - TURKCELL/Turkcell-LLM-7b-v1
+  eu:
+    language: eu
+    path_to_conll_dataset: UD_Basque-BDT/eu_bdt-ud-train.conllu
+    models:
+    - ixa-ehu/berteus-base-cased
+    - HiTZ/latxa-7b-v1.2
+  ca:
+    language: ca
+    path_to_conll_dataset: UD_Catalan-AnCora/ca_ancora-ud-train.conllu
+    models:
+    - PlanTL-GOB-ES/roberta-base-ca
+    - projecte-aina/FLOR-1.3B
+  es:
+    language: es
+    path_to_conll_dataset: UD_Spanish-AnCora/es_ancora-ud-train.conllu
+    models:
+    - PlanTL-GOB-ES/roberta-base-bne
+    - clibrain/lince-zero
+  pt:
+    language: pt
+    path_to_conll_dataset: UD_Portuguese-CINTIL/pt_cintil-ud-train.conllu
+    models:
+    - PORTULAN/albertina-900m-portuguese-ptpt-encoder
+    - NOVA-vision-language/GlorIA-1.3B
+    # These models are copied from Galician - how do they perform in Portuguese?
+    - marcosgg/bert-base-gl-cased
+    - proxectonos/Carballo-bloom-1.3B
+multilingual_models:
+# These models are run on all the models above - it does not necessarily mean that they are multilingual
+- microsoft/deberta-v3-base
+- microsoft/mdeberta-v3-base
+- google-bert/bert-base-uncased
+- openai-community/gpt2
+- bigscience/bloom-1b7
+- meta-llama/Llama-3.2-3B
+- EleutherAI/gpt-j-6b
+- mistralai/Mistral-7B-v0.3
+- google/gemma-2-9b
+trim_dataset_size: 1000 # Minimum size across datasets: 1K (TreeGal)
+min_words_matching_relation: 20
+# group_relations_by_family: true # Will be passed as a CLI argument
+# accept_bidirectional_relations: true # Will be passed as a CLI argument

@@ -1,0 +1,9 @@
+__pycache__
+.pytest_cache
+#UD_*
+attention.egg-info
+mlruns/
+.conda/
+run_*
+.env
+test/
