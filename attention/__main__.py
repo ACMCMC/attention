@@ -196,7 +196,7 @@ for language, metadata in experiment_config["languages"].items():
 
                     # For now, we'll just use AutoModel - this will work for both encoder and decoder models
                     loaded_model = transformers.AutoModel.from_pretrained(
-                        model_uri, trust_remote_code=True
+                        model_uri, trust_remote_code=True, attn_implementation="eager"
                     )
                     if torch.cuda.is_available():
                         loaded_model.to("cuda")

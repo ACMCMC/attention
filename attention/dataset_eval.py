@@ -147,8 +147,6 @@ def eval_ud(
 
     logging.info(f"About to process {len(conll_phrases)} examples...")
 
-    # conll_phrases = conll_phrases[:10]
-
     get_matching_heads_sentence = generate_fn_get_matching_heads_sentence(
         model, tokenizer, **kwargs
     )
@@ -157,7 +155,8 @@ def eval_ud(
     num_of_errored_phrases = 0
     for phrase in phrases_iterator:
         try:
-            heads_matching_sentence.append(get_matching_heads_sentence(phrase))
+            matching_heads_sentence = get_matching_heads_sentence(phrase)
+            heads_matching_sentence.append(matching_heads_sentence)
         except UnprocessableSentenceException as e:
             logging.exception(f"Error processing sentence {' '.join([word['FORM'] for word in phrase])}")
             num_of_errored_phrases += 1
