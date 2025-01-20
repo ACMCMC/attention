@@ -176,11 +176,6 @@ for language, metadata in experiment_config["languages"].items():
                         "remove_self_attention", args.remove_self_attention
                     )
 
-                    logger.info(f"Loading model {model_uri}...")
-                    # Which one to use: AutoModelForMaskedLM or AutoModelForCausalLM?
-                    # We can use the HFApi to get the model's metadata and if it's a decoder model, we use AutoModelForMaskedLM, otherwise, AutoModelForCausalLM
-                    # model_metadata = api.model_info(model_uri)
-
                     output_dir = (
                         Path(__file__).parent.parent
                         / f"results_{language}"
@@ -193,6 +188,11 @@ for language, metadata in experiment_config["languages"].items():
                             f"Output directory {output_dir} already exists and is not empty. Skipping..."
                         )
                         continue
+
+                    logger.info(f"Loading model {model_uri}...")
+                    # Which one to use: AutoModelForMaskedLM or AutoModelForCausalLM?
+                    # We can use the HFApi to get the model's metadata and if it's a decoder model, we use AutoModelForMaskedLM, otherwise, AutoModelForCausalLM
+                    # model_metadata = api.model_info(model_uri)
 
                     # For now, we'll just use AutoModel - this will work for both encoder and decoder models
                     loaded_model = transformers.AutoModel.from_pretrained(

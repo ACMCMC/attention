@@ -1,13 +1,12 @@
 # %%
 # Evaluate the model on the GLUE dataset
+import json
 import logging
 import os
 import random
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List
-
-from attention.model_process import UnprocessableSentenceException
 
 import datasets
 import mlflow
@@ -17,9 +16,11 @@ import tqdm
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from attention.conll import load_conllu_file, parse_to_conllu
-from attention.max_attention_weights import (heads_matching_relation,
-                                             max_attention_weights)
-from attention.model_process import get_attention_matrix
+from attention.max_attention_weights import (
+    heads_matching_relation,
+    max_attention_weights,
+)
+from attention.model_process import UnprocessableSentenceException, get_attention_matrix
 from attention.variability import get_relative_variability
 
 logging.basicConfig(level=logging.INFO)
@@ -121,20 +122,30 @@ def eval_ud(
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    if kwargs['group_relations_by_family'] == True:
-        logging.info(f"Grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
+    if kwargs["group_relations_by_family"] == True:
+        logging.info(
+            f"Grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})"
+        )
         conll_phrases = perform_group_relations_by_family(conll_phrases)
-    elif kwargs['group_relations_by_family'] == False:
-        logging.info(f"Not grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
+    elif kwargs["group_relations_by_family"] == False:
+        logging.info(
+            f"Not grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})"
+        )
     else:
         raise ValueError("The argument 'group_relations_by_family' must be defined")
 
-    if kwargs['accept_bidirectional_relations'] == True:
-        logging.info(f"Accepting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
-    elif kwargs['accept_bidirectional_relations'] == False:
-        logging.info(f"Rejecting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
+    if kwargs["accept_bidirectional_relations"] == True:
+        logging.info(
+            f"Accepting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})"
+        )
+    elif kwargs["accept_bidirectional_relations"] == False:
+        logging.info(
+            f"Rejecting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})"
+        )
     else:
-        raise ValueError("The argument 'accept_bidirectional_relations' must be defined")
+        raise ValueError(
+            "The argument 'accept_bidirectional_relations' must be defined"
+        )
 
     mlflow.log_param("original_dataset_size", len(conll_phrases))
     if trim_dataset_size:
@@ -152,18 +163,35 @@ def eval_ud(
     )
     phrases_iterator = tqdm.tqdm(conll_phrases, unit="phrase")
     heads_matching_sentence = []
-    num_of_errored_phrases = 0
-    for phrase in phrases_iterator:
+    ids_of_errored_phrases = []
+    for i, phrase in enumerate(phrases_iterator):
         try:
             matching_heads_sentence = get_matching_heads_sentence(phrase)
             heads_matching_sentence.append(matching_heads_sentence)
         except UnprocessableSentenceException as e:
-            logging.exception(f"Error processing sentence {' '.join([word['FORM'] for word in phrase])}")
-            num_of_errored_phrases += 1
+            logging.exception(
+                f"Error processing sentence {' '.join([word['FORM'] for word in phrase])}"
+            )
+            ids_of_errored_phrases.append(i)
 
     logging.info(
-        f"Processed {len(heads_matching_sentence)} examples. {num_of_errored_phrases} examples could not be processed (they raised an UnprocessableSentenceException)"
+        f"Processed {len(heads_matching_sentence)} examples. {len(ids_of_errored_phrases)} examples could not be processed (they raised an UnprocessableSentenceException)"
     )
+
+    # Store a file with the IDs of the errored phrases
+    os.makedirs(output_dir / "metadata", exist_ok=True)
+    with open(output_dir / "metadata" / "metadata.json", "w") as f:
+        json.dump(
+            {
+                "errored_phrases": ids_of_errored_phrases,
+                "number_processed_correctly": len(heads_matching_sentence),
+                "number_errored": len(ids_of_errored_phrases),
+                "total_number": len(conll_phrases),
+                "random_seed": random_seed,
+            },
+            f,
+            indent=4,
+        )
 
     variability_matrix = get_variability_matrix(
         model=model,
@@ -209,17 +237,11 @@ def eval_ud(
     # Set the column names to the 'head_'+head number
     variability_df.columns = [f"head_{i}" for i in range(num_heads)]
     variability_df.to_csv(
-        output_dir
-        / "variability"
-        / f"variability_{relation}.csv",
+        output_dir / "variability" / f"variability_{relation}.csv",
         index=True,
     )
 
-    mlflow.log_artifact(
-        output_dir
-        / "variability"
-        / f"variability_{relation}.csv"
-    )
+    mlflow.log_artifact(output_dir / "variability" / f"variability_{relation}.csv")
 
 
 def get_variability_matrix(
@@ -287,7 +309,7 @@ def generate_fn_get_matching_heads_sentence(
             attention_matrix = attention_matrix.masked_fill(
                 torch.eye(attention_matrix.shape[-1], dtype=bool), 0
             )
-        
+
         heads_matching_rel = heads_matching_relation(
             conll_pd=adjusted_conll_pd,
             attention_matrix=attention_matrix,
