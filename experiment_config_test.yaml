@@ -5,9 +5,8 @@ languages:
     path_to_conll_dataset: UD_Basque-BDT/eu_bdt-ud-train.conllu
     models:
     - ixa-ehu/berteus-base-cased
-multilingual_models:
-- google-bert/bert-base-uncased
+multilingual_models: []
 min_words_matching_relation: 0
-trim_dataset_size: 100 # Minimum size across datasets: 1K (TreeGal)
+trim_dataset_size: 1 # Minimum size across datasets: 1K (TreeGal)
 # group_relations_by_family: true
 # accept_bidirectional_relations: true
