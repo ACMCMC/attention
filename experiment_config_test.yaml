@@ -1,12 +1,11 @@
 experiment_name: experiment_test
 languages:
-  eu:
-    language: eu
-    path_to_conll_dataset: UD_Basque-BDT/eu_bdt-ud-train.conllu
+  en:
+    language: en
+    path_to_conll_dataset: UD_English-GUM/en_gum-ud-train.conllu
     models:
-    - ixa-ehu/berteus-base-cased
-multilingual_models:
-- google-bert/bert-base-uncased
+    - meta-llama/Llama-3.2-1B
+multilingual_models: []
 min_words_matching_relation: 0
 trim_dataset_size: 100 # Minimum size across datasets: 1K (TreeGal)
 # group_relations_by_family: true

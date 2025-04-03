@@ -31,7 +31,8 @@ def heads_matching_relation(
     conll_pd: pd.DataFrame,
     attention_matrix: torch.Tensor,
     accept_bidirectional_relations=False,
-):
+    return_all_weights=False,
+) -> List[Tuple[int, int, int, int, str, float]]:
     """
     Returns the heads matching relation between words in the phrase. There is a relation if conll row['HEAD'] == row['ID'].
 
@@ -41,13 +42,81 @@ def heads_matching_relation(
         accept_didirectional_relations (bool): whether to consider DEPENDANT -> HEAD only, or DEPENDANT <-> HEAD (bidirectional)
 
     Returns:
-        list: List of tuples with the relation between words in the phrase. Each tuple is (layer, head, head_word, dependent_word)
+        list: List of tuples with the relation between words in the phrase. Each tuple is (layer, head, head_word, dependent_word, deprel, attention_weight)
+            layer: Layer number
+            head: Head number
+            head_word: Head word index
+            dependent_word: Dependent word index
+            deprel: Dependency relation
+            attention_weight: Attention weight
     """
     heads_matching_relations = []
 
+    # TBH it would've been better if I thought about the possibility of returning all weights from the start – I'd have designed a different architecture, but now it's already implemented so I went for this (sorta) kludge
+    def process_one_row_inconditionally(
+        head_word_index: int, dependant_word_index: int, deprel: str
+    ):
+        """
+        Adds an entry to the heads_matching_relations list without checking if the max attention weights are equal to the head word index.
+        """
+        # Do this for all heads and layers
+        for layer_index in range(attention_matrix.shape[1]):
+            for head_index in range(attention_matrix.shape[2]):
+                heads_matching_relations.append(
+                    (
+                        layer_index,
+                        head_index,
+                        head_word_index,
+                        dependant_word_index,
+                        deprel,
+                        attention_matrix[
+                            :,
+                            layer_index,
+                            head_index,
+                            dependant_word_index,
+                            head_word_index,
+                        ].item(),
+                    )
+                )
+
+    if return_all_weights:
+        # If we want to return all weights, we don't need to get the max attention weights, we're gonna return everything anyway
+        # First, add all the relations to the list
+        for current_row_index, row in conll_pd.iterrows():
+            # The index is not necessarily monotonic (e.g. 1, 3, 4, 5...), but this is OK as the iterrows() function will return the value in the ID index, rather than a pure range index (0, 1, 2...)
+            dependant_word_index = current_row_index
+            head_word_index = row["HEAD"]
+            deprel = row["DEPREL"]
+            # If the head is -1, then it is the root word, so we skip it
+            if head_word_index == -1:
+                continue
+            # Now, add the relation to the list
+            process_one_row_inconditionally(
+                head_word_index=head_word_index,
+                dependant_word_index=dependant_word_index,
+                deprel=deprel,
+            )
+
+            if accept_bidirectional_relations:
+                # Second (and last), add the relations in the reverse order (HEAD -> DEPENDANT)
+                dependant_word_index = row["HEAD"]
+                head_word_index = current_row_index
+                deprel = row["DEPREL"]
+                process_one_row_inconditionally(
+                    head_word_index=head_word_index,
+                    dependant_word_index=dependant_word_index,
+                    deprel=deprel,
+                )
+        # Return the list of relations - don't execute the rest of the function
+        return heads_matching_relations
+
+    # We don't want to return all weights, so we need to get the max attention weights to filter them
     indices_of_max_attention = max_attention_weights(attention_matrix)
 
     def process_one_row(head_word_index: int, dependant_word_index: int, deprel: str):
+        """
+        Adds an entry to the heads_matching_relations list if the max attention weights are equal to the head word index.
+        """
         # Go through all the words in the phrase to find the heads matching relation
 
         # From the attention matrix, get all the elements where the last dimension in position i is equal to the head. Get their indices only
@@ -59,7 +128,16 @@ def heads_matching_relation(
         for batch, layer, head_index in zip(*heads_matching_this_relation):
             heads_matching_relations.append(
                 # Return word indices instead of the word itself because we might have multiple instances of the same word in the phrase (e.g. "the" in "the man likes the proposal")
-                (layer.item(), head_index.item(), head_word_index, dependant_word_index, deprel)
+                (
+                    layer.item(),
+                    head_index.item(),
+                    head_word_index,
+                    dependant_word_index,
+                    deprel,
+                    attention_matrix[
+                        batch, layer, head_index, dependant_word_index, head_word_index
+                    ].item(),
+                ),
             )
 
     for current_row_index, row in conll_pd.iterrows():
