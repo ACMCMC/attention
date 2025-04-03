@@ -13,7 +13,10 @@ import yaml
 from dotenv import load_dotenv
 from huggingface_hub import HfApi
 
-from attention.conll import get_all_possible_conll_phrases, filter_out_null_head_examples
+from attention.conll import (
+    get_all_possible_conll_phrases,
+    filter_out_null_head_examples,
+)
 
 from .dataset_eval import eval_ud
 
@@ -42,6 +45,11 @@ parser.add_argument(
     "--remove_self_attention",
     action="store_true",
     help="If True, we remove self-attention from the attention matrix by setting the diagonal to 0",
+)
+parser.add_argument(
+    "--use_soft_scores",
+    action="store_true",
+    help="If True, we calculate the scores by taking the attention weights instead of a boolean variable indicating whether the max attention weight is attributed to a specific layer.",
 )
 parser.add_argument(
     # An argument that lets the user specify a list of languages to evaluate. If the user specifies this argument, only the languages in this list will be evaluated. Otherwise, all languages will be evaluated.
@@ -125,7 +133,6 @@ for language, metadata in experiment_config["languages"].items():
             "multilingual_models", []
         )
 
-
         path_to_conll_dataset: Path = (
             Path(__file__).parent.parent / metadata["path_to_conll_dataset"]
         )
@@ -175,16 +182,14 @@ for language, metadata in experiment_config["languages"].items():
                     mlflow.log_param(
                         "remove_self_attention", args.remove_self_attention
                     )
-
-                    logger.info(f"Loading model {model_uri}...")
-                    # Which one to use: AutoModelForMaskedLM or AutoModelForCausalLM?
-                    # We can use the HFApi to get the model's metadata and if it's a decoder model, we use AutoModelForMaskedLM, otherwise, AutoModelForCausalLM
-                    # model_metadata = api.model_info(model_uri)
+                    mlflow.log_param(
+                        "use_soft_scores", args.use_soft_scores
+                    )
 
                     output_dir = (
                         Path(__file__).parent.parent
                         / f"results_{language}"
-                        / f"bidirectional_relations_{accept_bidirectional_relations}+group_relations_by_family_{group_relations_by_family}+remove_self_attention_{args.remove_self_attention}"
+                        / f"bidirectional_relations_{accept_bidirectional_relations}+group_relations_by_family_{group_relations_by_family}+remove_self_attention_{args.remove_self_attention}+soft_scores_{args.use_soft_scores}"
                         / model_name
                     )
                     # If the output directory exists and is not empty, skip this model
@@ -193,6 +198,11 @@ for language, metadata in experiment_config["languages"].items():
                             f"Output directory {output_dir} already exists and is not empty. Skipping..."
                         )
                         continue
+
+                    logger.info(f"Loading model {model_uri}...")
+                    # Which one to use: AutoModelForMaskedLM or AutoModelForCausalLM?
+                    # We can use the HFApi to get the model's metadata and if it's a decoder model, we use AutoModelForMaskedLM, otherwise, AutoModelForCausalLM
+                    # model_metadata = api.model_info(model_uri)
 
                     # For now, we'll just use AutoModel - this will work for both encoder and decoder models
                     loaded_model = transformers.AutoModel.from_pretrained(
@@ -213,6 +223,7 @@ for language, metadata in experiment_config["languages"].items():
                         trim_dataset_size=trim_dataset_size,
                         group_relations_by_family=group_relations_by_family,
                         remove_self_attention=args.remove_self_attention,
+                        use_soft_scores=args.use_soft_scores,
                         conll_phrases=conll_phrases,
                         # trim_dataset_size=10,
                     )

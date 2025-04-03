@@ -7,3 +7,4 @@ mlruns/
 run_*
 .env
 test/
+.venv

@@ -1,13 +1,12 @@
 # %%
 # Evaluate the model on the GLUE dataset
+import json
 import logging
 import os
 import random
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List
-
-from attention.model_process import UnprocessableSentenceException
 
 import datasets
 import mlflow
@@ -17,9 +16,11 @@ import tqdm
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from attention.conll import load_conllu_file, parse_to_conllu
-from attention.max_attention_weights import (heads_matching_relation,
-                                             max_attention_weights)
-from attention.model_process import get_attention_matrix
+from attention.max_attention_weights import (
+    heads_matching_relation,
+    max_attention_weights,
+)
+from attention.model_process import UnprocessableSentenceException, get_attention_matrix
 from attention.variability import get_relative_variability
 
 logging.basicConfig(level=logging.INFO)
@@ -44,7 +45,7 @@ def eval_glue(model, accept_bidirectional_relations):
 
 
 def perform_group_relations_by_family(
-    conll_phrases: List[List[Dict[str, Any]]]
+    conll_phrases: List[List[Dict[str, Any]]],
 ) -> List[List[Dict[str, Any]]]:
     """
     Group the relations by family. For example, 'nsubj', 'nsubjpass' and 'csubj' would be grouped together.
@@ -110,6 +111,8 @@ def eval_ud(
         raise ValueError("The argument 'group_relations_by_family' must be defined")
     if "remove_self_attention" not in kwargs:
         raise ValueError("The argument 'remove_self_attention' must be defined")
+    if "use_soft_scores" not in kwargs:
+        raise ValueError("The argument 'use_soft_scores' must be defined")
 
     # Set the random seed
     torch.manual_seed(random_seed)
@@ -121,20 +124,30 @@ def eval_ud(
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    if kwargs['group_relations_by_family'] == True:
-        logging.info(f"Grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
+    if kwargs["group_relations_by_family"] == True:
+        logging.info(
+            f"Grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})"
+        )
         conll_phrases = perform_group_relations_by_family(conll_phrases)
-    elif kwargs['group_relations_by_family'] == False:
-        logging.info(f"Not grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})")
+    elif kwargs["group_relations_by_family"] == False:
+        logging.info(
+            f"Not grouping relations by family... (group_relations_by_family={kwargs['group_relations_by_family']})"
+        )
     else:
         raise ValueError("The argument 'group_relations_by_family' must be defined")
 
-    if kwargs['accept_bidirectional_relations'] == True:
-        logging.info(f"Accepting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
-    elif kwargs['accept_bidirectional_relations'] == False:
-        logging.info(f"Rejecting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})")
+    if kwargs["accept_bidirectional_relations"] == True:
+        logging.info(
+            f"Accepting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})"
+        )
+    elif kwargs["accept_bidirectional_relations"] == False:
+        logging.info(
+            f"Rejecting bidirectional relations... (accept_bidirectional_relations={kwargs['accept_bidirectional_relations']})"
+        )
     else:
-        raise ValueError("The argument 'accept_bidirectional_relations' must be defined")
+        raise ValueError(
+            "The argument 'accept_bidirectional_relations' must be defined"
+        )
 
     mlflow.log_param("original_dataset_size", len(conll_phrases))
     if trim_dataset_size:
@@ -152,18 +165,35 @@ def eval_ud(
     )
     phrases_iterator = tqdm.tqdm(conll_phrases, unit="phrase")
     heads_matching_sentence = []
-    num_of_errored_phrases = 0
-    for phrase in phrases_iterator:
+    ids_of_errored_phrases = []
+    for i, phrase in enumerate(phrases_iterator):
         try:
             matching_heads_sentence = get_matching_heads_sentence(phrase)
             heads_matching_sentence.append(matching_heads_sentence)
         except UnprocessableSentenceException as e:
-            logging.exception(f"Error processing sentence {' '.join([word['FORM'] for word in phrase])}")
-            num_of_errored_phrases += 1
+            logging.exception(
+                f"Error processing sentence {' '.join([word['FORM'] for word in phrase])}"
+            )
+            ids_of_errored_phrases.append(i)
 
     logging.info(
-        f"Processed {len(heads_matching_sentence)} examples. {num_of_errored_phrases} examples could not be processed (they raised an UnprocessableSentenceException)"
+        f"Processed {len(heads_matching_sentence)} examples. {len(ids_of_errored_phrases)} examples could not be processed (they raised an UnprocessableSentenceException)"
     )
+
+    # Store a file with the IDs of the errored phrases
+    os.makedirs(output_dir / "metadata", exist_ok=True)
+    with open(output_dir / "metadata" / "metadata.json", "w") as f:
+        json.dump(
+            {
+                "errored_phrases": ids_of_errored_phrases,
+                "number_processed_correctly": len(heads_matching_sentence),
+                "number_errored": len(ids_of_errored_phrases),
+                "total_number": len(conll_phrases),
+                "random_seed": random_seed,
+            },
+            f,
+            indent=4,
+        )
 
     variability_matrix = get_variability_matrix(
         model=model,
@@ -183,7 +213,11 @@ def eval_ud(
         **kwargs,
     )
 
-    uas = calculate_uas(heads_matching_sentence, conll_phrases)
+    uas = calculate_uas(
+        heads_matching_sentence=heads_matching_sentence,
+        conll_phrases=conll_phrases,
+        use_soft_scores=kwargs["use_soft_scores"],
+    )
     # Output structure:
     # {
     #    'relation1': torch.Tensor([num_layers, num_heads]),
@@ -209,17 +243,11 @@ def eval_ud(
     # Set the column names to the 'head_'+head number
     variability_df.columns = [f"head_{i}" for i in range(num_heads)]
     variability_df.to_csv(
-        output_dir
-        / "variability"
-        / f"variability_{relation}.csv",
+        output_dir / "variability" / f"variability_{relation}.csv",
         index=True,
     )
 
-    mlflow.log_artifact(
-        output_dir
-        / "variability"
-        / f"variability_{relation}.csv"
-    )
+    mlflow.log_artifact(output_dir / "variability" / f"variability_{relation}.csv")
 
 
 def get_variability_matrix(
@@ -287,32 +315,37 @@ def generate_fn_get_matching_heads_sentence(
             attention_matrix = attention_matrix.masked_fill(
                 torch.eye(attention_matrix.shape[-1], dtype=bool), 0
             )
-        
+
         heads_matching_rel = heads_matching_relation(
             conll_pd=adjusted_conll_pd,
             attention_matrix=attention_matrix,
             accept_bidirectional_relations=kwargs["accept_bidirectional_relations"],
+            return_all_weights=kwargs["use_soft_scores"],
         )
-        # The result is a list of tuples (layer, head, head_word_id, dependent_word_id, dependency)
+        # The result is a list of tuples (layer, head, head_word_id, dependent_word_id, dependency, attention_weight)
 
         matching_heads_layer_and_head = [
-            (layer, head) for (layer, head, _, _, _) in heads_matching_rel
+            (layer, head) for (layer, head, _, _, _, _) in heads_matching_rel
         ]
         matching_heads_dependency = [
-            dependency for (_, _, _, _, dependency) in heads_matching_rel
+            dependency for (_, _, _, _, dependency, _) in heads_matching_rel
+        ]
+        matching_heads_attention_weight = [
+            weight for (_, _, _, _, _, weight) in heads_matching_rel
         ]
 
         # Get the variability of each head for each layer
         variability = get_relative_variability(attentions_matrix=attention_matrix[0])
         matching_heads_variability = [
             variability[layer, head]
-            for (layer, head, _, _, dependency) in heads_matching_rel
+            for (layer, head, _, _, dependency, _) in heads_matching_rel
         ]
 
         return {
             "matching_heads_layer_and_head": matching_heads_layer_and_head,
             "matching_heads_dependency": matching_heads_dependency,
             "matching_heads_variability": matching_heads_variability,
+            "matching_heads_attention_weight": matching_heads_attention_weight,
             "dependencies_head_and_dependant": dependencies_head_and_dependant,
             "dependencies_reltype": dependencies_reltype,
             "forms": adjusted_conll_pd["FORM"],
@@ -325,7 +358,7 @@ def generate_fn_get_matching_heads_sentence(
 
 # %%
 def plot_relations(
-    heads_matching_sentence,
+    heads_matching_sentence: dict,
     model: PreTrainedModel,
     display=True,
     output_dir=(Path(__file__).parent.parent / "results"),
@@ -342,6 +375,8 @@ def plot_relations(
     ]
     unique_relations = set(relations)
 
+    use_soft_scores = kwargs["use_soft_scores"]
+
     # Plot a 2D matrix with the heads matching each relation. The color of each cell is the number of heads matching that relation
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -354,7 +389,7 @@ def plot_relations(
     num_heads = model.config.num_attention_heads
     for relation in unique_relations:
         matrix = torch.tensor(
-            [[0 for _ in range(num_heads)] for _ in range(num_layers)]
+            [[0.0 for _ in range(num_heads)] for _ in range(num_layers)]
         )
         # opacity matrix is a tensor of size [num_layers, num_heads] with all zeros
         opacity_matrix = torch.zeros((num_layers, num_heads))
@@ -362,12 +397,18 @@ def plot_relations(
         total_words = 0
         for example in heads_matching_sentence:
             # Join matching_heads_layer_and_head and matching_heads_dependency to get the tuple
-            for (layer, head_position), dependency in zip(
+            for (layer, head_position), dependency, attention_weight in zip(
                 example["matching_heads_layer_and_head"],
                 example["matching_heads_dependency"],
+                example["matching_heads_attention_weight"],
             ):
                 if dependency == relation:
-                    matrix[layer][head_position] += 1
+                    matrix[layer][head_position] += (
+                        1
+                        if not use_soft_scores
+                        # If we use soft scores, then we set the value of the observed attention weight - because we also consider all heads to match the relation.
+                        else attention_weight
+                    )
             for (dependant_position, head_position), dependency in zip(
                 example["dependencies_head_and_dependant"],
                 example["dependencies_reltype"],
@@ -407,16 +448,16 @@ def plot_relations(
         plt.xlabel("Head")
         plt.ylabel("Layer")
         sns.heatmap(
-            matrix,
+            matrix.round(decimals=1),
             cmap="YlGnBu",
             vmin=0,
             vmax=total_words_matching_relation,
             annot=True,
             alpha=1.0 - variability_matrix_normalized,
             # Text size: 6
-            annot_kws={"size": 6},
+            annot_kws={"size": 4},
             # Do not use scientific notation
-            fmt="g",
+            fmt=".2g",
         )
 
         # Add the opacity matrix as a mask
@@ -476,6 +517,7 @@ def plot_relations(
 def calculate_uas(
     heads_matching_sentence: List[Dict[str, Any]],
     conll_phrases: List[List[Dict[str, Any]]],
+    use_soft_scores: bool,
 ) -> Dict[str, torch.Tensor]:
     """
     Calculate the Unlabeled Attachment Score (UAS) of the model on the dataset.
@@ -505,25 +547,30 @@ def calculate_uas(
     )  # This stores a matrix per dependency type, head and layer with the number of heads matching the relation
 
     total_tokens = 0
-    # TODO: Cambiar para que sea una division por el numero de veces que esa relacion aparece en COLNN (numero de hits / numero de veces que aparece en el dataset)
 
     # Now, for each dependency type, head and layer, calculate the UAS
     for example in heads_matching_sentence:
         # Here, we get the dependency type, head and layer for each word matching the relation
         # And we add 1 to the entry in the matrix for that dependency type, head and layer
-        for (layer, head), dependency in zip(
+        for (layer, head), dependency, attention_weight in zip(
             example["matching_heads_layer_and_head"],
             example["matching_heads_dependency"],
+            example["matching_heads_attention_weight"],
         ):
-            if dependency not in number_of_heads_matching_sentence_per_dependency:
-                number_of_heads_matching_sentence_per_dependency[dependency] = (
-                    torch.zeros((num_layers, num_heads))
-                )
-            number_of_heads_matching_sentence_per_dependency[dependency][
-                layer, head
-            ] += 1
+            number_of_heads_matching_sentence_per_dependency.setdefault(
+                # If the matrix doesn't exist, create it
+                dependency,
+                torch.zeros((num_layers, num_heads)),
+            )[layer, head] += (
+                1
+                if not use_soft_scores
+                # If we use soft scores, then we set the value of the observed attention weight - because we also consider all heads to match the relation.
+                else attention_weight
+            )
 
         total_tokens += example["max_attention_weights"].shape[-1]
+
+    del total_tokens  # We don't use it anymore, I kept the code above just in case but I delete it here to be sure it doesn't get accidentally accessed
 
     # Now, we have the number of heads matching each relation for each layer and head
     # We can calculate the UAS for each relation

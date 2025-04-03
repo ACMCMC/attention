@@ -6,6 +6,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 import re
 import pandas as pd
 import unicodedata
+import logging
 
 from attention.conll import parse_to_conllu
 from attention.max_attention_weights import join_subwords
@@ -20,13 +21,29 @@ class UnprocessableSentenceException(Exception):
     pass
 
 
-def remove_diacritics(text):
+def normalize_text(text):
     """
     Remove diacritics from the text
 
     This is useful because some models have trouble with diacritics. Specifically, the tokenization - detokenization process is not perfectly symmetrical so the Unicode characters are not exactly the same. The way to fix this is to remove the diacritics from the text before doing text-based comparisons.
+    
+    Also, this doesn't solve the case of e.g. EspaÃ±a in some models (seen in the Llama tokenization)
+    This often happens when UTF-8 encoded text is misinterpreted as ISO-8859-1 (Latin-1). The correct character decoding for "Ã±a" should be "ña."
+    The solution is to decode the text as UTF-8, which is the correct encoding for the text.
     """
-    return "".join([c for c in unicodedata.normalize('NFKD', text) if not unicodedata.combining(c)])
+
+    # Many tokenizers start new tokens with "Ġ" (e.g. BERT, RoBERTa. We can safely remove this character)
+    normalized_text = text.replace("Ġ", "")
+    try:
+        # decode the text as Latin-1 and encode it as UTF-8 ("EspaÃ±a" -> "España")
+        # Some other tokenizers don't have this problem, so we'll just ignore the exception (for example "Ġsaid". This can't be decoded as Latin-1 so we'd get an exception here but it's not a problem in such a tokenizer)
+        normalized_text = normalized_text.encode('latin1').decode('utf-8')
+    except (UnicodeEncodeError, UnicodeDecodeError) as e:
+        logging.debug(f"Could not encode/decode text {text} as Latin-1/UTF-8.")
+    # Then, remove the diacritics
+    normalized_text = "".join([c for c in unicodedata.normalize('NFKD', normalized_text) if not unicodedata.combining(c)])
+    normalized_text = normalized_text.lower()
+    return normalized_text
 
 
 def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words_with_diacritics: list):
@@ -34,9 +51,7 @@ def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words_wi
     Given the input_ids as string tokens and the encodings, get the words and their corresponding tokenized words
     """
     # Remove diacritics in the words - in some models, diacritics impede identification (because the tokenization - detokenization process is not perfectly symmetrical so the Unicode characters are not exactly the same)
-    words_without_diacritics = [remove_diacritics(word).lower() for word in words_with_diacritics]
-    # Also, some models lowercase the words, so we need to do that as well (e.g. BERT uncased)
-    normalized_words = [(word).lower() for word in words_without_diacritics]
+    normalized_words = [normalize_text(word) for word in words_with_diacritics]
 
     # This is a list of words and their corresponding tokenized words
     words_to_tokenized_words = []
@@ -66,8 +81,7 @@ def get_words_to_tokenized_words(input_ids_as_string_tokens, encodings, words_wi
         )  # By default, assume that this token is part of the current word
 
         # Remove diacritics in the token - in some models, this impedes identification (because the tokenization - detokenization process is not perfectly symmetrical so the Unicode characters are not exactly the same)
-        token_without_diacritics = remove_diacritics(token)
-        normalized_token = token_without_diacritics.lower()
+        normalized_token = normalize_text(token)
 
         for i, character in enumerate(normalized_token):
             if character == normalized_words[current_word_index][position_in_current_word]:

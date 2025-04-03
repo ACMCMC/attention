@@ -1,0 +1,14 @@
+{
+    "errored_phrases": [
+        70,
+        83,
+        117,
+        157,
+        210,
+        909
+    ],
+    "number_processed_correctly": 994,
+    "number_errored": 6,
+    "total_number": 1000,
+    "random_seed": 42
+}
