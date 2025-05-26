@@ -7,3 +7,5 @@ mlruns/
 run_*
 .env
 test/
+.venv
+streamlit_env
